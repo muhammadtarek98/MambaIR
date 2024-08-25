@@ -1,4 +1,4 @@
- # Author: Tobias Plötz, TU Darmstadt (tobias.ploetz@visinf.tu-darmstadt.deconv)
+ # Author: Tobias Plötz, TU Darmstadt (tobias.ploetz@visinf.tu-darmstadt.deconvolution_block)
 
  # This file is part of the implementation as described in the CVPR 2017 paper:
  # Tobias Plötz and Stefan Roth, Benchmarking Denoising Algorithms with Real Photographs.
