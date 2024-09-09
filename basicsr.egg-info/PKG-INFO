@@ -7,6 +7,7 @@ Author: Xintao Wang
 Author-email: xintao.wang@outlook.com
 License: Apache License 2.0
 Keywords: computer vision,restoration,super resolution
+Platform: UNKNOWN
 Classifier: Development Status :: 4 - Beta
 Classifier: License :: OSI Approved :: Apache Software License
 Classifier: Operating System :: OS Independent
@@ -450,4 +451,6 @@ This code is based on [BasicSR](https://github.com/XPixelGroup/BasicSR), [ART](h
 ## Contact
 
 If you have any questions, feel free to approach me at cshguo@gmail.com
+
+
 
