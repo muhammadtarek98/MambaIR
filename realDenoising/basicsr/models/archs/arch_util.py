@@ -1,22 +1,14 @@
 import math
 import torch
-from torch import nn as nn
+from IPython.core.completerlib import module_list
 from torch.nn import functional as F
 from torch.nn import init as init
 from torch.nn.modules.batchnorm import _BatchNorm
 
 from basicsr.utils import get_root_logger
 
-# try:
-#     from basicsr.models.ops.dcn import (ModulatedDeformConvPack,
-#                                         modulated_deform_conv)
-# except ImportError:
-#     # print('Cannot import dcn. Ignore this warning if dcn is not used. '
-#     #       'Otherwise install BasicSR with compiling dcn.')
-#
-
 @torch.no_grad()
-def default_init_weights(module_list, scale=1, bias_fill=0, **kwargs):
+def default_init_weights(module_list:list, scale:float=1.0, bias_fill:float=0.0, **kwargs):
     """Initialize network weights.
 
     Args:
@@ -30,23 +22,23 @@ def default_init_weights(module_list, scale=1, bias_fill=0, **kwargs):
         module_list = [module_list]
     for module in module_list:
         for m in module.modules():
-            if isinstance(m, nn.Conv2d):
+            if isinstance(m, torch.nn.Conv2d):
                 init.kaiming_normal_(m.weight, **kwargs)
                 m.weight.data *= scale
                 if m.bias is not None:
                     m.bias.data.fill_(bias_fill)
-            elif isinstance(m, nn.Linear):
+            elif isinstance(m, torch.nn.Linear):
                 init.kaiming_normal_(m.weight, **kwargs)
                 m.weight.data *= scale
                 if m.bias is not None:
                     m.bias.data.fill_(bias_fill)
             elif isinstance(m, _BatchNorm):
-                init.constant_(m.weight, 1)
+                init.constant_(m.weight, val=1)
                 if m.bias is not None:
                     m.bias.data.fill_(bias_fill)
 
 
-def make_layer(basic_block, num_basic_block, **kwarg):
+def make_layer(basic_block:torch.nn.Module, num_basic_block:int, **kwarg)->torch.nn.Sequential:
     """Make layers by stacking the same blocks.
 
     Args:
@@ -59,10 +51,10 @@ def make_layer(basic_block, num_basic_block, **kwarg):
     layers = []
     for _ in range(num_basic_block):
         layers.append(basic_block(**kwarg))
-    return nn.Sequential(*layers)
+    return torch.nn.Sequential(*layers)
 
 
-class ResidualBlockNoBN(nn.Module):
+class ResidualBlockNoBN(torch.nn.Module):
     """Residual block without BN.
 
     It has a style of:
@@ -77,23 +69,23 @@ class ResidualBlockNoBN(nn.Module):
             otherwise, use default_init_weights. Default: False.
     """
 
-    def __init__(self, num_feat=64, res_scale=1, pytorch_init=False):
+    def __init__(self, num_feat:int=64, res_scale:float=1, pytorch_init:bool=False):
         super(ResidualBlockNoBN, self).__init__()
         self.res_scale = res_scale
-        self.conv1 = nn.Conv2d(num_feat, num_feat, 3, 1, 1, bias=True)
-        self.conv2 = nn.Conv2d(num_feat, num_feat, 3, 1, 1, bias=True)
+        self.conv1 = nn.Conv2d(in_channels=num_feat,out_channels= num_feat, kernel_size=3, stride=1, padding=1, bias=True)
+        self.conv2 = nn.Conv2d(in_channels=num_feat, out_channels=num_feat, kernel_size=3, stride=1, padding=1, bias=True)
         self.relu = nn.ReLU(inplace=True)
 
         if not pytorch_init:
-            default_init_weights([self.conv1, self.conv2], 0.1)
+            default_init_weights(module_list=[self.conv1, self.conv2], scale=0.1)
 
-    def forward(self, x):
+    def forward(self, x:torch.Tensor)->torch.Tensor:
         identity = x
         out = self.conv2(self.relu(self.conv1(x)))
         return identity + out * self.res_scale
 
 
-class Upsample(nn.Sequential):
+class Upsample(torch.nn.Sequential):
     """Upsample module.
 
     Args:
@@ -101,26 +93,26 @@ class Upsample(nn.Sequential):
         num_feat (int): Channel number of intermediate features.
     """
 
-    def __init__(self, scale, num_feat):
+    def __init__(self, scale:int, num_feat:int):
         m = []
         if (scale & (scale - 1)) == 0:  # scale = 2^n
-            for _ in range(int(math.log(scale, 2))):
-                m.append(nn.Conv2d(num_feat, 4 * num_feat, 3, 1, 1))
-                m.append(nn.PixelShuffle(2))
+            for _ in range(int(math.log(scale, base=2))):
+                m.append(torch.nn.Conv2d(in_channels=num_feat,out_channels= 4 * num_feat,kernel_size= 3, stride=1, padding=1))
+                m.append(torch.nn.PixelShuffle(upscale_factor=2))
         elif scale == 3:
-            m.append(nn.Conv2d(num_feat, 9 * num_feat, 3, 1, 1))
-            m.append(nn.PixelShuffle(3))
+            m.append(torch.nn.Conv2d(in_channels=num_feat, out_channels=9 * num_feat, kernel_size=3, stride=1, padding=1))
+            m.append(torch.nn.PixelShuffle(upscale_factor=3))
         else:
             raise ValueError(f'scale {scale} is not supported. '
                              'Supported scales: 2^n and 3.')
         super(Upsample, self).__init__(*m)
 
 
-def flow_warp(x,
-              flow,
-              interp_mode='bilinear',
-              padding_mode='zeros',
-              align_corners=True):
+def flow_warp(x:torch.Tensor,
+              flow:torch.Tensor,
+              interp_mode:str='bilinear',
+              padding_mode:str='zeros',
+              align_corners:bool=True)->torch.Tensor:
     """Warp an image or feature map with optical flow.
 
     Args:
@@ -142,15 +134,15 @@ def flow_warp(x,
     grid_y, grid_x = torch.meshgrid(
         torch.arange(0, h).type_as(x),
         torch.arange(0, w).type_as(x))
-    grid = torch.stack((grid_x, grid_y), 2).float()  # W(x), H(y), 2
+    grid = torch.stack(tensors=(grid_x, grid_y), dim=2).float()  # W(x), H(y), 2
     grid.requires_grad = False
 
     vgrid = grid + flow
     # scale grid to [-1,1]
     vgrid_x = 2.0 * vgrid[:, :, :, 0] / max(w - 1, 1) - 1.0
     vgrid_y = 2.0 * vgrid[:, :, :, 1] / max(h - 1, 1) - 1.0
-    vgrid_scaled = torch.stack((vgrid_x, vgrid_y), dim=3)
-    output = F.grid_sample(
+    vgrid_scaled = torch.stack(tensors=(vgrid_x, vgrid_y), dim=3)
+    output = torch.nn.functional.grid_sample(
         x,
         vgrid_scaled,
         mode=interp_mode,
@@ -161,11 +153,11 @@ def flow_warp(x,
     return output
 
 
-def resize_flow(flow,
-                size_type,
-                sizes,
-                interp_mode='bilinear',
-                align_corners=False):
+def resize_flow(flow:torch.Tensor,
+                size_type:str,
+                sizes:list,
+                interp_mode:str='bilinear',
+                align_corners:bool=False)->torch.Tensor:
     """Resize a flow according to ratio or shape.
 
     Args:
@@ -199,7 +191,7 @@ def resize_flow(flow,
     ratio_w = output_w / flow_w
     input_flow[:, 0, :, :] *= ratio_w
     input_flow[:, 1, :, :] *= ratio_h
-    resized_flow = F.interpolate(
+    resized_flow = torch.nn.functional.interpolate(
         input=input_flow,
         size=(output_h, output_w),
         mode=interp_mode,
@@ -208,7 +200,7 @@ def resize_flow(flow,
 
 
 # TODO: may write a cpp file
-def pixel_unshuffle(x, scale):
+def pixel_unshuffle(x:torch.Tensor, scale:int)->torch.Tensor:
     """ Pixel unshuffle.
 
     Args:
