@@ -16,9 +16,12 @@ from pdb import set_trace as stx
 
 parser = argparse.ArgumentParser(description='Real Image Denoising')
 
-parser.add_argument('--input_dir', default='../datasets/RealDN/DND/', type=str, help='Directory of validation images')
+parser.add_argument('--input_dir', default='/home/muahmmad/projects/Image_enhancement/Enhancement_Dataset/',
+                    type=str,
+                    help='Directory of validation images')
 parser.add_argument('--result_dir', default='./results/Real_Denoising/DND/', type=str, help='Directory for results')
-parser.add_argument('--weights', default='../experiments/pretrained_models/RealDN_MambaIR.pth', type=str, help='Path to weights')
+parser.add_argument('--weights',
+                    default='/home/muahmmad/projects/packages/MambaIR/realDenoising/pretrained_models/realDN.pth', type=str, help='Path to weights')
 parser.add_argument('--save_images', action='store_true', help='Save denoised images in result directory')
 
 args = parser.parse_args()
@@ -63,9 +66,9 @@ israw = False
 eval_version="1.0"
 
 # Load info
-infos = h5py.File(os.path.join(args.input_dir, 'info.mat'), 'r')
-info = infos['info']
-bb = info['boundingboxes']
+#infos = h5py.File(os.path.join(args.input_dir, 'info.mat'), 'r')
+#info = infos['info']
+#bb = info['boundingboxes']
 
 # Process data
 with torch.no_grad():
@@ -84,7 +87,7 @@ with torch.no_grad():
             idx = [int(boxes[k,0]-1),int(boxes[k,2]),int(boxes[k,1]-1),int(boxes[k,3])]
             noisy_patch = torch.from_numpy(Inoisy[idx[0]:idx[1],idx[2]:idx[3],:]).unsqueeze(0).permute(0,3,1,2).cuda()
             restored_patch = model_restoration(noisy_patch)
-            restored_patch = torch.clamp(restored_patch,0,1).cpu().detach().permute(0, 2, 3, 1).squeeze(0).numpy()
+            restored_patch = torch.clamp(input=restored_patch,min=0,max=1).cpu().detach().permute(0, 2, 3, 1).squeeze(0).numpy()
             Idenoised[k] = restored_patch
 
             if args.save_images:
@@ -94,7 +97,7 @@ with torch.no_grad():
 
         # save denoised data
         sio.savemat(os.path.join(result_dir_mat, filename),
-                    {"Idenoised": Idenoised,
+                    mdict={"Idenoised": Idenoised,
                      "israw": israw,
                      "eval_version": eval_version},
                     )

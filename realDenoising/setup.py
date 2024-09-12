@@ -159,7 +159,7 @@ if __name__ == '__main__':
         url='https://github.com/xinntao/BasicSR',
         packages=find_packages(
             exclude=('options', 'datasets', 'experiments', 'results',
-                     'tb_logger', 'wandb')),
+                     'tb_logger')),
         classifiers=[
             'Development Status :: 4 - Beta',
             'License :: OSI Approved :: Apache Software License',
@@ -167,6 +167,7 @@ if __name__ == '__main__':
             'Programming Language :: Python :: 3',
             'Programming Language :: Python :: 3.7',
             'Programming Language :: Python :: 3.8',
+            'Programming Language :: Python :: 3.10'
         ],
         license='Apache License 2.0',
         setup_requires=['cython', 'numpy'],
