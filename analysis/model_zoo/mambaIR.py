@@ -1,10 +1,10 @@
 import math
 import torch
 import torch.utils.checkpoint as checkpoint
+import torchinfo
 from timm.models.layers import  to_2tuple, trunc_normal_
 from mamba_ssm.ops.selective_scan_interface import selective_scan_fn, selective_scan_ref
 from einops import  repeat
-
 NEG_INF = -1000000
 
 
@@ -266,7 +266,7 @@ class SS2D(torch.nn.Module):
         y = y1 + y2 + y3 + y4
         y = torch.transpose(y, dim0=1, dim1=2).contiguous().view(B, H, W, -1)
         y = self.out_norm(y)
-        y = y * F.silu(z)
+        y = y * torch.nn.functional.silu(z)
         out = self.out_proj(y)
         if self.dropout is not None:
             out = self.dropout(out)
@@ -676,4 +676,6 @@ def buildMambaIR_light(upscale=2):
                    upsampler='pixelshuffledirect',
                    resi_connection='1conv')
 model=buildMambaIR()
-print(model)
+model=model.to(device="cuda")
+x=torch.randn(size=(1,3,64,64)).to("cuda")
+torchinfo.summary(model=model,input_data=x)
