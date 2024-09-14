@@ -1,12 +1,11 @@
+import os
+
 import cv2
-cv2.setNumThreads(1)
 import numpy as np
 import torch
-from os import path as osp
-from torch.nn import functional as F
 
-from basicsr.data.transforms import mod_crop
-from basicsr.utils import img2tensor, scandir
+from MambaIR.basicsr.data.transforms import mod_crop
+from MambaIR.basicsr.utils import img2tensor, scandir
 
 
 def read_img_seq(path, require_mod_crop=False, scale=1):
@@ -139,9 +138,9 @@ def paired_paths_from_lmdb(folders, keys):
             f'formats. But received {input_key}: {input_folder}; '
             f'{gt_key}: {gt_folder}')
     # ensure that the two meta_info files are the same
-    with open(osp.join(input_folder, 'meta_info.txt')) as fin:
+    with open(os.path.join(input_folder, 'meta_info.txt')) as fin:
         input_lmdb_keys = [line.split('.')[0] for line in fin]
-    with open(osp.join(gt_folder, 'meta_info.txt')) as fin:
+    with open(os.path.join(gt_folder, 'meta_info.txt')) as fin:
         gt_lmdb_keys = [line.split('.')[0] for line in fin]
     if set(input_lmdb_keys) != set(gt_lmdb_keys):
         raise ValueError(
@@ -195,10 +194,10 @@ def paired_paths_from_meta_info_file(folders, keys, meta_info_file,
 
     paths = []
     for gt_name in gt_names:
-        basename, ext = osp.splitext(osp.basename(gt_name))
+        basename, ext = os.path.splitext(os.path.basename(gt_name))
         input_name = f'{filename_tmpl.format(basename)}{ext}'
-        input_path = osp.join(input_folder, input_name)
-        gt_path = osp.join(gt_folder, gt_name)
+        input_path = os.path.join(input_folder, input_name)
+        gt_path = os.path.join(gt_folder, gt_name)
         paths.append(
             dict([(f'{input_key}_path', input_path),
                   (f'{gt_key}_path', gt_path)]))
@@ -237,14 +236,14 @@ def paired_paths_from_folder(folders, keys, filename_tmpl):
     paths = []
     for idx in range(len(gt_paths)):
         gt_path = gt_paths[idx]
-        basename, ext = osp.splitext(osp.basename(gt_path))
+        basename, ext = os.path.splitext(os.path.basename(gt_path))
         input_path = input_paths[idx]
-        basename_input, ext_input = osp.splitext(osp.basename(input_path))
+        basename_input, ext_input = os.path.splitext(os.path.basename(input_path))
         input_name = f'{filename_tmpl.format(basename)}{ext_input}'
-        input_path = osp.join(input_folder, input_name)
+        input_path = os.path.join(input_folder, input_name)
         assert input_name in input_paths, (f'{input_name} is not in '
                                            f'{input_key}_paths.')
-        gt_path = osp.join(gt_folder, gt_path)
+        gt_path = os.path.join(gt_folder, gt_path)
         paths.append(
             dict([(f'{input_key}_path', input_path),
                   (f'{gt_key}_path', gt_path)]))
@@ -283,20 +282,20 @@ def paired_DP_paths_from_folder(folders, keys, filename_tmpl):
     paths = []
     for idx in range(len(gt_paths)):
         gt_path = gt_paths[idx]
-        basename, ext = osp.splitext(osp.basename(gt_path))
+        basename, ext = os.path.splitext(os.path.basename(gt_path))
         inputL_path = inputL_paths[idx]
-        basename_input, ext_input = osp.splitext(osp.basename(inputL_path))
+        basename_input, ext_input = os.path.splitext(os.path.basename(inputL_path))
         inputL_name = f'{filename_tmpl.format(basename)}{ext_input}'
-        inputL_path = osp.join(inputL_folder, inputL_name)
+        inputL_path = os.path.join(inputL_folder, inputL_name)
         assert inputL_name in inputL_paths, (f'{inputL_name} is not in '
                                            f'{inputL_key}_paths.')
         inputR_path = inputR_paths[idx]
-        basename_input, ext_input = osp.splitext(osp.basename(inputR_path))
+        basename_input, ext_input = os.path.splitext(os.path.basename(inputR_path))
         inputR_name = f'{filename_tmpl.format(basename)}{ext_input}'
-        inputR_path = osp.join(inputR_folder, inputR_name)
+        inputR_path = os.path.join(inputR_folder, inputR_name)
         assert inputR_name in inputR_paths, (f'{inputR_name} is not in '
                                            f'{inputR_key}_paths.')
-        gt_path = osp.join(gt_folder, gt_path)
+        gt_path = os.path.join(gt_folder, gt_path)
         paths.append(
             dict([(f'{inputL_key}_path', inputL_path),
                   (f'{inputR_key}_path', inputR_path),
@@ -315,7 +314,7 @@ def paths_from_folder(folder):
     """
 
     paths = list(scandir(folder))
-    paths = [osp.join(folder, path) for path in paths]
+    paths = [os.path.join(folder, path) for path in paths]
     return paths
 
 
@@ -330,7 +329,7 @@ def paths_from_lmdb(folder):
     """
     if not folder.endswith('.lmdb'):
         raise ValueError(f'Folder {folder}folder should in lmdb format.')
-    with open(osp.join(folder, 'meta_info.txt')) as fin:
+    with open(os.path.join(folder, 'meta_info.txt')) as fin:
         paths = [line.split('.')[0] for line in fin]
     return paths
 
@@ -375,12 +374,12 @@ def duf_downsample(x, kernel_size=13, scale=4):
     b, t, c, h, w = x.size()
     x = x.view(-1, 1, h, w)
     pad_w, pad_h = kernel_size // 2 + scale * 2, kernel_size // 2 + scale * 2
-    x = F.pad(x, (pad_w, pad_w, pad_h, pad_h), 'reflect')
+    x = torch.nn.functional.pad(x, (pad_w, pad_w, pad_h, pad_h), 'reflect')
 
     gaussian_filter = generate_gaussian_kernel(kernel_size, 0.4 * scale)
     gaussian_filter = torch.from_numpy(gaussian_filter).type_as(x).unsqueeze(
         0).unsqueeze(0)
-    x = F.conv2d(x, gaussian_filter, stride=scale)
+    x = torch.nn.functional.conv2d(x, gaussian_filter, stride=scale)
     x = x[:, :, 2:-2, 2:-2]
     x = x.view(b, t, c, x.size(2), x.size(3))
     if squeeze_flag:

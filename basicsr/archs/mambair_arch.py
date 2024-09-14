@@ -1,15 +1,9 @@
 # Code Implementation of the MambaIR Model
 import math
 import torch
-from rastervision.pytorch_learner import torch_hub_load_uri
 from timm.models.layers import  to_2tuple, trunc_normal_
 from mamba_ssm.ops.selective_scan_interface import selective_scan_fn, selective_scan_ref
-from einops import rearrange, repeat
-
-from MambaIR.realDenoising.basicsr.utils import padding
-
-NEG_INF = -1000000
-
+from einops import  repeat
 
 class ChannelAttention(torch.nn.Module):
     """Channel attention used in RCAN.
@@ -17,7 +11,6 @@ class ChannelAttention(torch.nn.Module):
         num_feat (int): Channel number of intermediate features.
         squeeze_factor (int): Channel squeeze factor. Default: 16.
     """
-
     def __init__(self, num_feat, squeeze_factor=16):
         super(ChannelAttention, self).__init__()
         self.attention = torch.nn.Sequential(
@@ -142,12 +135,10 @@ class Attention(torch.nn.Module):
         self.position_bias = position_bias
         if self.position_bias:
             self.pos = DynamicPosBias(self.dim // 4, self.num_heads)
-
         self.qkv = torch.nn.Linear(in_features=dim,out_features= dim * 3, bias=qkv_bias)
         self.attn_drop = torch.nn.Dropout(attn_drop)
         self.proj = torch.nn.Linear(in_features=dim,out_features= dim)
         self.proj_drop = torch.nn.Dropout(p=proj_drop)
-
         self.softmax = torch.nn.Softmax(dim=-1)
 
     def forward(self, x, H, W, mask=None):
@@ -163,17 +154,14 @@ class Attention(torch.nn.Module):
         assert H * W == N
         qkv = self.qkv(x).reshape(B_, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4).contiguous()
         q, k, v = qkv[0], qkv[1], qkv[2]
-
         q = q * self.scale
         attn = (q @ k.transpose(-2, -1))  # (B_, self.num_heads, N, N), N = H*W
-
         if self.position_bias:
             # generate mother-set
             position_bias_h = torch.arange(1 - group_size[0], group_size[0], device=attn.device)
             position_bias_w = torch.arange(1 - group_size[1], group_size[1], device=attn.device)
             biases = torch.stack(torch.meshgrid([position_bias_h, position_bias_w]))  # 2, 2Gh-1, 2W2-1
-            biases = biases.flatten(1).transpose(0, 1).contiguous().float()  # (2h-1)*(2w-1) 2
-
+            biases = biases.flatten(1).transpose(dim0=0, dim1=1).contiguous().float()  # (2h-1)*(2w-1) 2
             # get pair-wise relative position index for each token inside the window
             coords_h = torch.arange(group_size[0], device=attn.device)
             coords_w = torch.arange(group_size[1], device=attn.device)
@@ -185,14 +173,12 @@ class Attention(torch.nn.Module):
             relative_coords[:, :, 1] += group_size[1] - 1
             relative_coords[:, :, 0] *= 2 * group_size[1] - 1
             relative_position_index = relative_coords.sum(-1)  # Gh*Gw, Gh*Gw
-
             pos = self.pos(biases)  # 2Gh-1 * 2Gw-1, heads
             # select position bias
             relative_position_bias = pos[relative_position_index.view(-1)].view(
                 group_size[0] * group_size[1], group_size[0] * group_size[1], -1)  # Gh*Gw,Gh*Gw,nH
             relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Gh*Gw, Gh*Gw
             attn = attn + relative_position_bias.unsqueeze(0)
-
         if mask is not None:
             nP = mask.shape[0]
             attn = attn.view(B_ // nP, nP, self.num_heads, N, N) + mask.unsqueeze(1).unsqueeze(
@@ -201,9 +187,7 @@ class Attention(torch.nn.Module):
             attn = self.softmax(attn)
         else:
             attn = self.softmax(attn)
-
         attn = self.attn_drop(attn)
-
         x = (attn @ v).transpose(1, 2).reshape(B_, N, C)
         x = self.proj(x)
         x = self.proj_drop(x)
@@ -250,7 +234,6 @@ class SS2D(torch.nn.Module):
             **factory_kwargs,
         )
         self.act = torch.nn.SiLU()
-
         self.x_proj = (
             torch.nn.Linear(in_features=self.d_inner,
                             out_features= (self.dt_rank + self.d_state * 2),
@@ -268,7 +251,6 @@ class SS2D(torch.nn.Module):
         self.x_proj_weight = torch.nn.Parameter(
             torch.stack([t.weight for t in self.x_proj], dim=0))  # (K=4, N, inner)
         del self.x_proj
-
         self.dt_projs = (
             self.dt_init(self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor,
                          **factory_kwargs),
@@ -280,14 +262,11 @@ class SS2D(torch.nn.Module):
                          **factory_kwargs),
         )
         self.dt_projs_weight = torch.nn.Parameter(torch.stack([t.weight for t in self.dt_projs], dim=0))  # (K=4, inner, rank)
-        self.dt_projs_bias = torch.nn.Parameter(torch.stack([t.bias for t in self.dt_projs], dim=0))  # (K=4, inner)
+        self.dt_projs_bias = torch.nn.Parameter(torch.stack(tensors=[t.bias for t in self.dt_projs], dim=0))  # (K=4, inner)
         del self.dt_projs
-
         self.A_logs = self.A_log_init(self.d_state, self.d_inner, copies=4, merge=True)  # (K=4, D, N)
         self.Ds = self.D_init(self.d_inner, copies=4, merge=True)  # (K=4, D, N)
-
         self.selective_scan = selective_scan_fn
-
         self.out_norm = torch.nn.LayerNorm(self.d_inner)
         self.out_proj = torch.nn.Linear(in_features=self.d_inner,
                                         out_features= self.d_model,
@@ -356,8 +335,8 @@ class SS2D(torch.nn.Module):
         B, C, H, W = x.shape
         L = H * W
         K = 4
-        x_hwwh = torch.stack([x.view(B, -1, L), torch.transpose(x, dim0=2, dim1=3).contiguous().view(B, -1, L)], dim=1).view(B, 2, -1, L)
-        xs = torch.cat([x_hwwh, torch.flip(x_hwwh, dims=[-1])], dim=1) # (1, 4, 192, 3136)
+        x_hwwh = torch.stack(tensors=[x.view(B, -1, L), torch.transpose(x, dim0=2, dim1=3).contiguous().view(B, -1, L)], dim=1).view(B, 2, -1, L)
+        xs = torch.cat(tensors=[x_hwwh, torch.flip(x_hwwh, dims=[-1])], dim=1) # (1, 4, 192, 3136)
 
         x_dbl = torch.einsum("b k d l, k c d -> b k c l", xs.view(B, K, -1, L), self.x_proj_weight)
         dts, Bs, Cs = torch.split(x_dbl, [self.dt_rank, self.d_state, self.d_state], dim=2)
@@ -386,10 +365,8 @@ class SS2D(torch.nn.Module):
 
     def forward(self, x: torch.Tensor, **kwargs):
         B, H, W, C = x.shape
-
         xz = self.in_proj(x)
         x, z = xz.chunk(2, dim=-1)
-
         x = x.permute(0, 3, 1, 2).contiguous()
         x = self.act(self.conv2d(x))
         y1, y2, y3, y4 = self.forward_core(x)
@@ -527,7 +504,7 @@ class MambaIR(torch.nn.Module):
            use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False
            upscale: Upscale factor. 2/3/4 for image SR, 1 for denoising
            img_range: Image range. 1. or 255.
-           upsampler: The reconstruction reconstruction module. 'pixelshuffle'/None
+           upsampler: The  reconstruction module. 'pixelshuffle'/None
            resi_connection: The convolutional block before residual connection. '1conv'/'3conv'
        """
     def __init__(self,

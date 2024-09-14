@@ -1,11 +1,9 @@
 import importlib
-import torch
 from collections import OrderedDict
 from copy import deepcopy
-from os import path as osp
-from tqdm import tqdm
-
+import torch
 from basicsr.models.archs import define_network
+
 from basicsr.models.base_model import BaseModel
 from basicsr.utils import get_root_logger, imwrite, tensor2img
 
@@ -14,10 +12,6 @@ metric_module = importlib.import_module('basicsr.metrics')
 
 import os
 import random
-import numpy as np
-import cv2
-import torch.nn.functional as F
-from functools import partial
 
 class Mixing_Augment:
     def __init__(self, mixup_beta, use_identity, device):
@@ -180,7 +174,7 @@ class ImageCleanModel(BaseModel):
             mod_pad_h = window_size - h % window_size
         if w % window_size != 0:
             mod_pad_w = window_size - w % window_size
-        img = F.pad(self.lq, (0, mod_pad_w, 0, mod_pad_h), 'reflect')
+        img = torch.nn.functional.pad(self.lq, (0, mod_pad_w, 0, mod_pad_h), 'reflect')
         self.nonpad_test(img)
         _, _, h, w = self.output.size()
         self.output = self.output[:, :, 0:h - mod_pad_h * scale, 0:w - mod_pad_w * scale]

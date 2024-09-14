@@ -32,26 +32,17 @@ def get_git_hash():
         env['LC_ALL'] = 'C'
         out = subprocess.Popen(cmd, stdout=subprocess.PIPE, env=env).communicate()[0]
         return out
-
     try:
         out = _minimal_ext_cmd(['git', 'rev-parse', 'HEAD'])
         sha = out.strip().decode('ascii')
     except OSError:
         sha = 'unknown'
-
     return sha
 
 
 def get_hash():
     if os.path.exists('.git'):
         sha = get_git_hash()[:7]
-    # currently ignore this
-    # elif os.path.exists(version_file):
-    #     try:
-    #         from basicsr.version import __version__
-    #         sha = __version__.split('+')[-1]
-    #     except ImportError:
-    #         raise ImportError('Unable to get git version')
     else:
         sha = 'unknown'
 
@@ -157,10 +148,10 @@ if __name__ == '__main__':
             'Programming Language :: Python :: 3',
             'Programming Language :: Python :: 3.7',
             'Programming Language :: Python :: 3.8',
+            'Programming Language :: Python :: 3.10'
         ],
         license='Apache License 2.0',
         setup_requires=['cython', 'numpy'],
-        #install_requires=get_requirements(),
         ext_modules=ext_modules,
         cmdclass={'build_ext': BuildExtension},
         zip_safe=False)

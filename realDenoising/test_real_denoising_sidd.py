@@ -1,15 +1,13 @@
-import numpy as np
-import os
 import argparse
-from tqdm import tqdm
-import torch
-import torch.nn as nn
+import os
 
-from basicsr.models.archs.mambairunet_arch import MambaIRUNet
+import numpy as np
 import scipy.io as sio
+import torch
+from MambaIR.basicsr.models.archs.mambairunet_arch import MambaIRUNet
+from tqdm import tqdm
 
 parser = argparse.ArgumentParser(description='Real Image Denoising')
-
 parser.add_argument('--input_dir', default='../datasets/RealDN/SIDD/', type=str, help='Directory of validation images')
 parser.add_argument('--result_dir', default='./results/Real_Denoising/SIDD/', type=str, help='Directory for results')
 parser.add_argument('--weights', default='../experiments/pretrained_models/RealDN_MambaIR.pth', type=str, help='Path to weights')
@@ -49,7 +47,7 @@ checkpoint = torch.load(args.weights)
 model_restoration.load_state_dict(checkpoint['params'])
 print("===>Testing using weights: ",args.weights)
 model_restoration.cuda()
-model_restoration = nn.DataParallel(model_restoration)
+model_restoration = torch.nn.DataParallel(model_restoration)
 model_restoration.eval()
 
 # Process data

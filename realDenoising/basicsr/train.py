@@ -2,27 +2,24 @@ import argparse
 import datetime
 import logging
 import math
+import os
 import random
 import time
-import torch
-from os import path as osp
-import sys
-import os
-#current_dir = os.path.dirname(os.path.realpath(__file__))
-#sys.path.remove(current_dir.replace('/realDenoising/basicsr',''))
-
-from basicsr.data import create_dataloader, create_dataset
-from basicsr.data.data_sampler import EnlargedSampler
-from basicsr.data.prefetch_dataloader import CPUPrefetcher, CUDAPrefetcher
-from basicsr.models import create_model
-from basicsr.utils import (MessageLogger, check_resume, get_env_info,
-                           get_root_logger, get_time_str, init_tb_logger,
-                           init_wandb_logger, make_exp_dirs, mkdir_and_rename,
-                           set_random_seed)
-from basicsr.utils.dist_util import get_dist_info, init_dist
-from basicsr.utils.options import dict2str, parse
 
 import numpy as np
+import torch
+
+from MambaIR.basicsr.data import create_dataloader, create_dataset
+from MambaIR.basicsr.data.data_sampler import EnlargedSampler
+from MambaIR.basicsr.data.prefetch_dataloader import CPUPrefetcher, CUDAPrefetcher
+from MambaIR.basicsr.models import create_model
+from MambaIR.basicsr.utils import (MessageLogger, check_resume, get_env_info,
+                                   get_root_logger, get_time_str, init_tb_logger,
+                                   init_wandb_logger, make_exp_dirs, mkdir_and_rename,
+                                   set_random_seed)
+from MambaIR.basicsr.utils.dist_util import get_dist_info, init_dist
+from MambaIR.basicsr.utils.options import dict2str, parse
+
 
 def parse_options(is_train=True):
     parser = argparse.ArgumentParser()
@@ -62,7 +59,7 @@ def parse_options(is_train=True):
 
 
 def init_loggers(opt):
-    log_file = osp.join(opt['path']['log'],
+    log_file = os.path.join(opt['path']['log'],
                         f"train_{opt['name']}_{get_time_str()}.log")
     logger = get_root_logger(
         logger_name='basicsr', log_level=logging.INFO, log_file=log_file)
@@ -78,7 +75,7 @@ def init_loggers(opt):
         init_wandb_logger(opt)
     tb_logger = None
     if opt['logger'].get('use_tb_logger') and 'debug' not in opt['name']:
-        tb_logger = init_tb_logger(log_dir=osp.join('tb_logger', opt['name']))
+        tb_logger = init_tb_logger(log_dir=os.path.join('tb_logger', opt['name']))
     return logger, tb_logger
 
 
@@ -166,7 +163,7 @@ def main():
         make_exp_dirs(opt)
         if opt['logger'].get('use_tb_logger') and 'debug' not in opt[
                 'name'] and opt['rank'] == 0:
-            mkdir_and_rename(osp.join('tb_logger', opt['name']))
+            mkdir_and_rename(os.path.join('tb_logger', opt['name']))
 
     # initialize loggers
     logger, tb_logger = init_loggers(opt)
