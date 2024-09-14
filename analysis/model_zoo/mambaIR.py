@@ -137,7 +137,6 @@ class SS2D(torch.nn.Module):
             **factory_kwargs,
         )
         self.act = torch.nn.SiLU()
-
         self.x_proj = (
             torch.nn.Linear(in_features=self.d_inner,out_features= (self.dt_rank + self.d_state * 2), bias=False, **factory_kwargs),
             torch.nn.Linear(in_features=self.d_inner, out_features=(self.dt_rank + self.d_state * 2), bias=False, **factory_kwargs),
@@ -146,7 +145,6 @@ class SS2D(torch.nn.Module):
         )
         self.x_proj_weight = torch.nn.Parameter(torch.stack([t.weight for t in self.x_proj], dim=0))
         del self.x_proj
-
         self.dt_projs = (
             self.dt_init(self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor,
                          **factory_kwargs),
@@ -160,12 +158,9 @@ class SS2D(torch.nn.Module):
         self.dt_projs_weight = torch.nn.Parameter(torch.stack([t.weight for t in self.dt_projs], dim=0))
         self.dt_projs_bias = torch.nn.Parameter(torch.stack([t.bias for t in self.dt_projs], dim=0))
         del self.dt_projs
-
         self.A_logs = self.A_log_init(self.d_state, self.d_inner, copies=4, merge=True)
         self.Ds = self.D_init(self.d_inner, copies=4, merge=True)
-
         self.selective_scan = selective_scan_fn
-
         self.out_norm = torch.nn.LayerNorm(self.d_inner)
         self.out_proj = torch.nn.Linear(in_features=self.d_inner, out_features=self.d_model, bias=bias, **factory_kwargs)
         self.dropout = torch.nn.Dropout(dropout) if dropout > 0. else None
@@ -174,7 +169,6 @@ class SS2D(torch.nn.Module):
     def dt_init(dt_rank, d_inner, dt_scale=1.0, dt_init="random", dt_min=0.001, dt_max=0.1, dt_init_floor=1e-4,
                 **factory_kwargs):
         dt_proj = torch.nn.Linear(dt_rank, d_inner, bias=True, **factory_kwargs)
-
         dt_init_std = dt_rank ** -0.5 * dt_scale
         if dt_init == "constant":
             torch.nn.init.constant_(dt_proj.weight, dt_init_std)
@@ -182,8 +176,6 @@ class SS2D(torch.nn.Module):
             torch.nn.init.uniform_(dt_proj.weight, -dt_init_std, dt_init_std)
         else:
             raise NotImplementedError
-
-
         dt = torch.exp(
             torch.rand(d_inner, **factory_kwargs) * (math.log(dt_max) - math.log(dt_min))
             + math.log(dt_min)
@@ -191,9 +183,7 @@ class SS2D(torch.nn.Module):
         inv_dt = dt + torch.log(-torch.expm1(-dt))
         with torch.no_grad():
             dt_proj.bias.copy_(inv_dt)
-
         dt_proj.bias._no_reinit = True
-
         return dt_proj
 
     @staticmethod
