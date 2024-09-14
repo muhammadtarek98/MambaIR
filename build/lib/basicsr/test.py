@@ -4,10 +4,10 @@ from os import path as osp
 import sys
 # for some possible IMPORT ERROR
 # sys.path.append('/data1/guohang/MambaIR-main')
-from basicsr.data import build_dataloader, build_dataset
-from basicsr.models import build_model
-from basicsr.utils import get_root_logger, get_time_str, make_exp_dirs
-from basicsr.utils.options import dict2str, parse_options
+from MambaIR.basicsr.data import build_dataloader, build_dataset
+from MambaIR.basicsr.models import build_model
+from MambaIR.basicsr.utils import get_root_logger, get_time_str, make_exp_dirs
+from MambaIR.basicsr.utils.options import dict2str, parse_options
 
 
 def test_pipeline(root_path):

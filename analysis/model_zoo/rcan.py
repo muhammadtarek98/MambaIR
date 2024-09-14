@@ -1,7 +1,6 @@
 import math
 import torch
 import torchinfo
-from torch.autograd import Variable
 
 def default_conv(in_channels, out_channels, kernel_size, bias=True):
     return torch.nn.Conv2d(

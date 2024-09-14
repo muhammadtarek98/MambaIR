@@ -675,7 +675,19 @@ def buildMambaIR_light(upscale=2):
                    img_range=1.,
                    upsampler='pixelshuffledirect',
                    resi_connection='1conv')
-model=buildMambaIR()
+model=MambaIR(in_chans=3,
+              upscale=2,
+              img_size=64,
+              img_range=1,
+              depths=[6, 6, 6, 6, 6, 6],
+              embed_dim=180,
+              mlp_ratio=2,upsampler="pixelshuffle",
+              resi_connection="1conv")
+state_dict=torch.load(f="/home/muhammad/projects/MambaIR/experiments/pretrained_models/ColorDN_MambaIR_level50.pth",
+                      map_location="cuda")
+#for keys in state_dict["params"]:
+#    print(keys)
+model.load_state_dict(state_dict=state_dict["params"])
 model=model.to(device="cuda")
 x=torch.randn(size=(1,3,64,64)).to("cuda")
 torchinfo.summary(model=model,input_data=x)

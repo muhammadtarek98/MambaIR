@@ -3,11 +3,11 @@ from collections import OrderedDict
 from os import path as osp
 from tqdm import tqdm
 
-from basicsr.archs import build_network
-from basicsr.losses import build_loss
-from basicsr.metrics import calculate_metric
-from basicsr.utils import get_root_logger, imwrite, tensor2img
-from basicsr.utils.registry import MODEL_REGISTRY
+from MambaIR.basicsr.archs import build_network
+from MambaIR.basicsr.losses import build_loss
+from MambaIR.basicsr.metrics import calculate_metric
+from MambaIR.basicsr.utils import get_root_logger, imwrite, tensor2img
+from MambaIR.basicsr.utils.registry import MODEL_REGISTRY
 from .base_model import BaseModel
 
 

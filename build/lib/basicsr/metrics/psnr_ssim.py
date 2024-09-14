@@ -1,11 +1,10 @@
 import cv2
 import numpy as np
 
-from basicsr.metrics.metric_util import reorder_image, to_y_channel
-from basicsr.utils.registry import METRIC_REGISTRY
+from MambaIR.basicsr.metrics.metric_util import reorder_image, to_y_channel
+from MambaIR.basicsr.utils.registry import METRIC_REGISTRY
 
 
-@METRIC_REGISTRY.register()
 def calculate_psnr(img, img2, crop_border, input_order='HWC', test_y_channel=False, **kwargs):
     """Calculate PSNR (Peak Signal-to-Noise Ratio).
 
@@ -80,7 +79,6 @@ def _ssim(img, img2):
     return ssim_map.mean()
 
 
-@METRIC_REGISTRY.register()
 def calculate_ssim(img, img2, crop_border, input_order='HWC', test_y_channel=False, **kwargs):
     """Calculate SSIM (structural similarity).
 

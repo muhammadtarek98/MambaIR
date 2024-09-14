@@ -5,7 +5,6 @@
 
 import math
 import torch
-import torch.utils.checkpoint as checkpoint
 from timm.models.layers import  to_2tuple, trunc_normal_
 
 
@@ -147,7 +146,7 @@ class SwinTransformerBlock(torch.nn.Module):
     r""" Swin Transformer Block.
     Args:
         dim (int): Number of input channels.
-        input_resolution (tuple[int]): Input resulotion.
+        input_resolution (tuple[int]): Input resolution.
         num_heads (int): Number of attention heads.
         window_size (int): Window size.
         shift_size (int): Shift size for SW-MSA.
@@ -274,7 +273,7 @@ class PatchMerging(torch.nn.Module):
         super(PatchMerging,self).__init__()
         self.input_resolution = input_resolution
         self.dim = dim
-        self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
+        self.reduction = torch.nn.Linear(in_features=4 * dim,out_features= 2 * dim, bias=False)
         self.norm = norm_layer(4 * dim)
 
     def forward(self, x):
@@ -352,7 +351,7 @@ class BasicLayer(torch.nn.Module):
     def forward(self, x, x_size):
         for blk in self.blocks:
             if self.use_checkpoint:
-                x = checkpoint.checkpoint(blk, x, x_size)
+                x = torch.utils.checkpoint(blk, x, x_size)
             else:
                 x = blk(x, x_size)
         if self.downsample is not None:
@@ -416,7 +415,7 @@ class RSTB(torch.nn.Module):
             self.conv = torch.nn.Conv2d(in_channels=dim,out_channels= dim,kernel_size= 3, stride=1, padding=1)
         elif resi_connection == '3conv':
             # to save parameters and memory
-            self.conv = nn.Sequential(torch.nn.Conv2d(in_channels=dim,out_channels= dim // 4,kernel_size= 3,stride= 1, padding=1),
+            self.conv = torch.nn.Sequential(torch.nn.Conv2d(in_channels=dim,out_channels= dim // 4,kernel_size= 3,stride= 1, padding=1),
                                       torch.nn.LeakyReLU(negative_slope=0.2, inplace=True),
                                       torch.nn.Conv2d(in_channels=dim // 4,out_channels= dim // 4,kernel_size= 1, stride=1, padding=0),
                                       torch.nn.LeakyReLU(negative_slope=0.2, inplace=True),
@@ -674,7 +673,7 @@ class SwinIR(torch.nn.Module):
             self.upsample = UpsampleOneStep(upscale, embed_dim, num_out_ch,
                                             (patches_resolution[0], patches_resolution[1]))
         elif self.upsampler == 'nearest+conv':
-            # for real-world SR (less artifacts)
+            # for real-world SR (artifacts)
             self.conv_before_upsample = torch.nn.Sequential(
                 torch.nn.Conv2d(in_channels=embed_dim,out_channels= num_feat,kernel_size=3,stride= 1,padding=1),
                 torch.nn.LeakyReLU(inplace=True))
@@ -710,7 +709,7 @@ class SwinIR(torch.nn.Module):
         _, _, h, w = x.size()
         mod_pad_h = (self.window_size - h % self.window_size) % self.window_size
         mod_pad_w = (self.window_size - w % self.window_size) % self.window_size
-        x = F.pad(x, (0, mod_pad_w, 0, mod_pad_h), 'reflect')
+        x = torch.nn.functional.pad(x, (0, mod_pad_w, 0, mod_pad_h), 'reflect')
         return x
 
     def forward_features(self, x):

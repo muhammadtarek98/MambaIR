@@ -1,13 +1,8 @@
 # Code Implementation of the MambaIR Model
 import math
 import torch
-import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
-import torch.nn.functional as F
-from functools import partial
-from typing import Optional, Callable
-from basicsr.utils.registry import ARCH_REGISTRY
-from timm.models.layers import DropPath, to_2tuple, trunc_normal_
+from timm.models.layers import  to_2tuple, trunc_normal_
 from mamba_ssm.ops.selective_scan_interface import selective_scan_fn, selective_scan_ref
 from einops import rearrange, repeat
 
@@ -16,7 +11,7 @@ from einops import rearrange, repeat
 NEG_INF = -1000000
 
 
-class ChannelAttention(nn.Module):
+class ChannelAttention(torch.nn.Module):
     """Channel attention used in RCAN.
     Args:
         num_feat (int): Channel number of intermediate features.
@@ -25,27 +20,27 @@ class ChannelAttention(nn.Module):
 
     def __init__(self, num_feat, squeeze_factor=16):
         super(ChannelAttention, self).__init__()
-        self.attention = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(num_feat, num_feat // squeeze_factor, 1, padding=0),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(num_feat // squeeze_factor, num_feat, 1, padding=0),
-            nn.Sigmoid())
+        self.attention = torch.nn.Sequential(
+            torch.nn.AdaptiveAvgPool2d(1),
+            torch.nn.Conv2d(num_feat, num_feat // squeeze_factor, 1, padding=0),
+            torch.nn.ReLU(inplace=True),
+            torch.nn.Conv2d(num_feat // squeeze_factor, num_feat, 1, padding=0),
+            torch.nn.Sigmoid())
 
     def forward(self, x):
         y = self.attention(x)
         return x * y
 
 
-class CAB(nn.Module):
+class CAB(torch.nn.Module):
     def __init__(self, num_feat, is_light_sr= False, compress_ratio=3,squeeze_factor=30):
         super(CAB, self).__init__()
         if is_light_sr: # a larger compression ratio is used for light-SR
             compress_ratio = 6
-        self.cab = nn.Sequential(
-            nn.Conv2d(num_feat, num_feat // compress_ratio, 3, 1, 1),
-            nn.GELU(),
-            nn.Conv2d(num_feat // compress_ratio, num_feat, 3, 1, 1),
+        self.cab = torch.nn.Sequential(
+            torch.nn.Conv2d(num_feat, num_feat // compress_ratio, 3, 1, 1),
+            torch.nn.GELU(),
+            torch.nn.Conv2d(num_feat // compress_ratio, num_feat, 3, 1, 1),
             ChannelAttention(num_feat, squeeze_factor)
         )
 
@@ -53,15 +48,15 @@ class CAB(nn.Module):
         return self.cab(x)
 
 
-class Mlp(nn.Module):
-    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
-        super().__init__()
+class Mlp(torch.nn.Module):
+    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=torch.nn.GELU, drop=0.):
+        super(Mlp,self).__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
-        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.fc1 = torch.nn.Linear(in_features, hidden_features)
         self.act = act_layer()
-        self.fc2 = nn.Linear(hidden_features, out_features)
-        self.drop = nn.Dropout(drop)
+        self.fc2 = torch.nn.Linear(hidden_features, out_features)
+        self.drop = torch.nn.Dropout(drop)
 
     def forward(self, x):
         x = self.fc1(x)
@@ -72,26 +67,26 @@ class Mlp(nn.Module):
         return x
 
 
-class DynamicPosBias(nn.Module):
+class DynamicPosBias(torch.nn.Module):
     def __init__(self, dim, num_heads):
         super().__init__()
         self.num_heads = num_heads
         self.pos_dim = dim // 4
-        self.pos_proj = nn.Linear(2, self.pos_dim)
-        self.pos1 = nn.Sequential(
-            nn.LayerNorm(self.pos_dim),
-            nn.ReLU(inplace=True),
-            nn.Linear(self.pos_dim, self.pos_dim),
+        self.pos_proj = torch.nn.Linear(2, self.pos_dim)
+        self.pos1 = torch.nn.Sequential(
+            torch.nn.LayerNorm(self.pos_dim),
+            torch.nn.ReLU(inplace=True),
+            torch.nn.Linear(self.pos_dim, self.pos_dim),
         )
-        self.pos2 = nn.Sequential(
-            nn.LayerNorm(self.pos_dim),
-            nn.ReLU(inplace=True),
-            nn.Linear(self.pos_dim, self.pos_dim)
+        self.pos2 = torch.nn.Sequential(
+            torch.nn.LayerNorm(self.pos_dim),
+            torch.nn.ReLU(inplace=True),
+            torch.nn.Linear(self.pos_dim, self.pos_dim)
         )
-        self.pos3 = nn.Sequential(
-            nn.LayerNorm(self.pos_dim),
-            nn.ReLU(inplace=True),
-            nn.Linear(self.pos_dim, self.num_heads)
+        self.pos3 = torch.nn.Sequential(
+            torch.nn.LayerNorm(self.pos_dim),
+            torch.nn.ReLU(inplace=True),
+            torch.nn.Linear(self.pos_dim, self.num_heads)
         )
 
     def forward(self, biases):
@@ -106,7 +101,7 @@ class DynamicPosBias(nn.Module):
         return flops
 
 
-class Attention(nn.Module):
+class Attention(torch.nn.Module):
     r""" Multi-head self attention module with dynamic position bias.
 
     Args:
@@ -121,7 +116,7 @@ class Attention(nn.Module):
     def __init__(self, dim, num_heads, qkv_bias=True, qk_scale=None, attn_drop=0., proj_drop=0.,
                  position_bias=True):
 
-        super().__init__()
+        super(Attention,self).__init__()
         self.dim = dim
         self.num_heads = num_heads
         head_dim = dim // num_heads
@@ -130,12 +125,12 @@ class Attention(nn.Module):
         if self.position_bias:
             self.pos = DynamicPosBias(self.dim // 4, self.num_heads)
 
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-        self.attn_drop = nn.Dropout(attn_drop)
-        self.proj = nn.Linear(dim, dim)
-        self.proj_drop = nn.Dropout(proj_drop)
+        self.qkv = torch.nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.attn_drop = torch.nn.Dropout(attn_drop)
+        self.proj = torch.nn.Linear(dim, dim)
+        self.proj_drop = torch.nn.Dropout(proj_drop)
 
-        self.softmax = nn.Softmax(dim=-1)
+        self.softmax = torch.nn.Softmax(dim=-1)
 
     def forward(self, x, H, W, mask=None):
         """
@@ -197,7 +192,7 @@ class Attention(nn.Module):
         return x
 
 
-class SS2D(nn.Module):
+class SS2D(torch.nn.Module):
     def __init__(
             self,
             d_model,
@@ -218,7 +213,7 @@ class SS2D(nn.Module):
             **kwargs,
     ):
         factory_kwargs = {"device": device, "dtype": dtype}
-        super().__init__()
+        super(SS2D,self).__init__()
         self.d_model = d_model
         self.d_state = d_state
         self.d_conv = d_conv
@@ -226,8 +221,8 @@ class SS2D(nn.Module):
         self.d_inner = int(self.expand * self.d_model)
         self.dt_rank = math.ceil(self.d_model / 16) if dt_rank == "auto" else dt_rank
 
-        self.in_proj = nn.Linear(self.d_model, self.d_inner * 2, bias=bias, **factory_kwargs)
-        self.conv2d = nn.Conv2d(
+        self.in_proj = torch.nn.Linear(self.d_model, self.d_inner * 2, bias=bias, **factory_kwargs)
+        self.conv2d = torch.nn.Conv2d(
             in_channels=self.d_inner,
             out_channels=self.d_inner,
             groups=self.d_inner,
@@ -236,15 +231,15 @@ class SS2D(nn.Module):
             padding=(d_conv - 1) // 2,
             **factory_kwargs,
         )
-        self.act = nn.SiLU()
+        self.act = torch.nn.SiLU()
 
         self.x_proj = (
-            nn.Linear(self.d_inner, (self.dt_rank + self.d_state * 2), bias=False, **factory_kwargs),
-            nn.Linear(self.d_inner, (self.dt_rank + self.d_state * 2), bias=False, **factory_kwargs),
-            nn.Linear(self.d_inner, (self.dt_rank + self.d_state * 2), bias=False, **factory_kwargs),
-            nn.Linear(self.d_inner, (self.dt_rank + self.d_state * 2), bias=False, **factory_kwargs),
+            torch.nn.Linear(self.d_inner, (self.dt_rank + self.d_state * 2), bias=False, **factory_kwargs),
+            torch.nn.Linear(self.d_inner, (self.dt_rank + self.d_state * 2), bias=False, **factory_kwargs),
+            torch.nn.Linear(self.d_inner, (self.dt_rank + self.d_state * 2), bias=False, **factory_kwargs),
+            torch.nn.Linear(self.d_inner, (self.dt_rank + self.d_state * 2), bias=False, **factory_kwargs),
         )
-        self.x_proj_weight = nn.Parameter(torch.stack([t.weight for t in self.x_proj], dim=0))  # (K=4, N, inner)
+        self.x_proj_weight = torch.nn.Parameter(torch.stack([t.weight for t in self.x_proj], dim=0))  # (K=4, N, inner)
         del self.x_proj
 
         self.dt_projs = (
@@ -257,8 +252,8 @@ class SS2D(nn.Module):
             self.dt_init(self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor,
                          **factory_kwargs),
         )
-        self.dt_projs_weight = nn.Parameter(torch.stack([t.weight for t in self.dt_projs], dim=0))  # (K=4, inner, rank)
-        self.dt_projs_bias = nn.Parameter(torch.stack([t.bias for t in self.dt_projs], dim=0))  # (K=4, inner)
+        self.dt_projs_weight = torch.nn.Parameter(torch.stack([t.weight for t in self.dt_projs], dim=0))  # (K=4, inner, rank)
+        self.dt_projs_bias = torch.nn.Parameter(torch.stack([t.bias for t in self.dt_projs], dim=0))  # (K=4, inner)
         del self.dt_projs
 
         self.A_logs = self.A_log_init(self.d_state, self.d_inner, copies=4, merge=True)  # (K=4, D, N)
@@ -266,21 +261,21 @@ class SS2D(nn.Module):
 
         self.selective_scan = selective_scan_fn
 
-        self.out_norm = nn.LayerNorm(self.d_inner)
-        self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=bias, **factory_kwargs)
-        self.dropout = nn.Dropout(dropout) if dropout > 0. else None
+        self.out_norm = torch.nn.LayerNorm(self.d_inner)
+        self.out_proj = torch.nn.Linear(self.d_inner, self.d_model, bias=bias, **factory_kwargs)
+        self.dropout = torch.nn.Dropout(dropout) if dropout > 0. else None
 
     @staticmethod
     def dt_init(dt_rank, d_inner, dt_scale=1.0, dt_init="random", dt_min=0.001, dt_max=0.1, dt_init_floor=1e-4,
                 **factory_kwargs):
-        dt_proj = nn.Linear(dt_rank, d_inner, bias=True, **factory_kwargs)
+        dt_proj = torch.nn.Linear(dt_rank, d_inner, bias=True, **factory_kwargs)
 
         # Initialize special dt projection to preserve variance at initialization
         dt_init_std = dt_rank ** -0.5 * dt_scale
         if dt_init == "constant":
-            nn.init.constant_(dt_proj.weight, dt_init_std)
+            torch.nn.init.constant_(dt_proj.weight, dt_init_std)
         elif dt_init == "random":
-            nn.init.uniform_(dt_proj.weight, -dt_init_std, dt_init_std)
+            torch.nn.init.uniform_(dt_proj.weight, -dt_init_std, dt_init_std)
         else:
             raise NotImplementedError
 
@@ -311,7 +306,7 @@ class SS2D(nn.Module):
             A_log = repeat(A_log, "d n -> r d n", r=copies)
             if merge:
                 A_log = A_log.flatten(0, 1)
-        A_log = nn.Parameter(A_log)
+        A_log = torch.nn.Parameter(A_log)
         A_log._no_weight_decay = True
         return A_log
 
@@ -323,7 +318,7 @@ class SS2D(nn.Module):
             D = repeat(D, "n1 -> r n1", r=copies)
             if merge:
                 D = D.flatten(0, 1)
-        D = nn.Parameter(D)  # Keep in fp32
+        D = torch.nn.Parameter(D)  # Keep in fp32
         D._no_weight_decay = True
         return D
 
@@ -372,33 +367,33 @@ class SS2D(nn.Module):
         y = y1 + y2 + y3 + y4
         y = torch.transpose(y, dim0=1, dim1=2).contiguous().view(B, H, W, -1)
         y = self.out_norm(y)
-        y = y * F.silu(z)
+        y = y * torch.nn.functional.silu(z)
         out = self.out_proj(y)
         if self.dropout is not None:
             out = self.dropout(out)
         return out
 
 
-class VSSBlock(nn.Module):
+class VSSBlock(torch.nn.Module):
     def __init__(
             self,
             hidden_dim: int = 0,
             drop_path: float = 0,
-            norm_layer: Callable[..., torch.nn.Module] = partial(nn.LayerNorm, eps=1e-6),
+            norm_layer= torch.nn.LayerNorm,
             attn_drop_rate: float = 0,
             d_state: int = 16,
             expand: float = 2.,
             is_light_sr: bool = False,
             **kwargs,
     ):
-        super().__init__()
+        super(VSSBlock,self).__init__()
         self.ln_1 = norm_layer(hidden_dim)
         self.self_attention = SS2D(d_model=hidden_dim, d_state=d_state,expand=expand,dropout=attn_drop_rate, **kwargs)
-        self.drop_path = DropPath(drop_path)
-        self.skip_scale= nn.Parameter(torch.ones(hidden_dim))
+        self.drop_path = torch.nn.Dropout(p=drop_path)
+        self.skip_scale= torch.nn.Parameter(torch.ones(hidden_dim))
         self.conv_blk = CAB(hidden_dim,is_light_sr)
-        self.ln_2 = nn.LayerNorm(hidden_dim)
-        self.skip_scale2 = nn.Parameter(torch.ones(hidden_dim))
+        self.ln_2 = torch.nn.LayerNorm(hidden_dim)
+        self.skip_scale2 = torch.nn.Parameter(torch.ones(hidden_dim))
 
 
 
@@ -413,7 +408,7 @@ class VSSBlock(nn.Module):
         return x
 
 
-class BasicLayer(nn.Module):
+class BasicLayer(torch.nn.Module):
     """ The Basic MambaIR Layer in one Residual State Space Group
     Args:
         dim (int): Number of input channels.
@@ -433,11 +428,11 @@ class BasicLayer(nn.Module):
                  drop_path=0.,
                  d_state=16,
                  mlp_ratio=2.,
-                 norm_layer=nn.LayerNorm,
+                 norm_layer=torch.nn.LayerNorm,
                  downsample=None,
                  use_checkpoint=False,is_light_sr=False):
 
-        super().__init__()
+        super(BasicLayer,self).__init__()
         self.dim = dim
         self.input_resolution = input_resolution
         self.depth = depth
@@ -445,12 +440,12 @@ class BasicLayer(nn.Module):
         self.use_checkpoint = use_checkpoint
 
         # build blocks
-        self.blocks = nn.ModuleList()
+        self.blocks = torch.nn.ModuleList()
         for i in range(depth):
             self.blocks.append(VSSBlock(
                 hidden_dim=dim,
                 drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
-                norm_layer=nn.LayerNorm,
+                norm_layer=torch.nn.LayerNorm,
                 attn_drop_rate=0,
                 d_state=d_state,
                 expand=self.mlp_ratio,
@@ -484,8 +479,7 @@ class BasicLayer(nn.Module):
         return flops
 
 
-@ARCH_REGISTRY.register()
-class MambaIR(nn.Module):
+class MambaIR(torch.nn.Module):
     r""" MambaIR Model
            A PyTorch impl of : `A Simple Baseline for Image Restoration with State Space Model `.
 
@@ -516,7 +510,7 @@ class MambaIR(nn.Module):
                  d_state = 16,
                  mlp_ratio=2.,
                  drop_path_rate=0.1,
-                 norm_layer=nn.LayerNorm,
+                 norm_layer=torch.nn.LayerNorm,
                  patch_norm=True,
                  use_checkpoint=False,
                  upscale=2,
@@ -538,7 +532,7 @@ class MambaIR(nn.Module):
         self.upsampler = upsampler
         self.mlp_ratio=mlp_ratio
         # ------------------------- 1, shallow feature extraction ------------------------- #
-        self.conv_first = nn.Conv2d(num_in_ch, embed_dim, 3, 1, 1)
+        self.conv_first = torch.nn.Conv2d(num_in_ch, embed_dim, 3, 1, 1)
 
         # ------------------------- 2, deep feature extraction ------------------------- #
         self.num_layers = len(depths)
@@ -566,13 +560,13 @@ class MambaIR(nn.Module):
             embed_dim=embed_dim,
             norm_layer=norm_layer if self.patch_norm else None)
 
-        self.pos_drop = nn.Dropout(p=drop_rate)
+        self.pos_drop = torch.nn.Dropout(p=drop_rate)
         self.is_light_sr = True if self.upsampler=='pixelshuffledirect' else False
         # stochastic depth
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]  # stochastic depth decay rule
 
         # build Residual State Space Group (RSSG)
-        self.layers = nn.ModuleList()
+        self.layers = torch.nn.ModuleList()
         for i_layer in range(self.num_layers): # 6-layer
             layer = ResidualGroup(
                 dim=embed_dim,
@@ -594,39 +588,42 @@ class MambaIR(nn.Module):
 
         # build the last conv layer in the end of all residual groups
         if resi_connection == '1conv':
-            self.conv_after_body = nn.Conv2d(embed_dim, embed_dim, 3, 1, 1)
+            self.conv_after_body = torch.nn.Conv2d(embed_dim, embed_dim, 3, 1, 1)
         elif resi_connection == '3conv':
             # to save parameters and memory
-            self.conv_after_body = nn.Sequential(
-                nn.Conv2d(embed_dim, embed_dim // 4, 3, 1, 1), nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                nn.Conv2d(embed_dim // 4, embed_dim // 4, 1, 1, 0), nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                nn.Conv2d(embed_dim // 4, embed_dim, 3, 1, 1))
+            self.conv_after_body = torch.nn.Sequential(
+                torch.nn.Conv2d(embed_dim, embed_dim // 4, 3, 1, 1),
+                torch.nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                torch.nn.Conv2d(embed_dim // 4, embed_dim // 4, 1, 1, 0),
+                torch.nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                torch.nn.Conv2d(embed_dim // 4, embed_dim, 3, 1, 1))
 
         # -------------------------3. high-quality image reconstruction ------------------------ #
         if self.upsampler == 'pixelshuffle':
             # for classical SR
-            self.conv_before_upsample = nn.Sequential(
-                nn.Conv2d(embed_dim, num_feat, 3, 1, 1), nn.LeakyReLU(inplace=True))
+            self.conv_before_upsample = torch.nn.Sequential(
+                torch.nn.Conv2d(embed_dim, num_feat, 3, 1, 1),
+                torch.nn.LeakyReLU(inplace=True))
             self.upsample = Upsample(upscale, num_feat)
-            self.conv_last = nn.Conv2d(num_feat, num_out_ch, 3, 1, 1)
+            self.conv_last = torch.nn.Conv2d(num_feat, num_out_ch, 3, 1, 1)
         elif self.upsampler == 'pixelshuffledirect':
             # for lightweight SR (to save parameters)
             self.upsample = UpsampleOneStep(upscale, embed_dim, num_out_ch)
 
         else:
             # for image denoising
-            self.conv_last = nn.Conv2d(embed_dim, num_out_ch, 3, 1, 1)
+            self.conv_last = torch.nn.Conv2d(embed_dim, num_out_ch, 3, 1, 1)
 
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
+        if isinstance(m, torch.nn.Linear):
             trunc_normal_(m.weight, std=.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
+            if isinstance(m, torch.nn.Linear) and m.bias is not None:
+                torch.nn.init.constant_(m.bias, 0)
+        elif isinstance(m, torch.nn.LayerNorm):
+            torch.nn.init.constant_(m.bias, 0)
+            torch.nn.init.constant_(m.weight, 1.0)
 
     @torch.jit.ignore
     def no_weight_decay(self):
@@ -689,7 +686,7 @@ class MambaIR(nn.Module):
         return flops
 
 
-class ResidualGroup(nn.Module):
+class ResidualGroup(torch.nn.Module):
     """Residual State Space Group (RSSG).
 
     Args:
@@ -713,7 +710,7 @@ class ResidualGroup(nn.Module):
                  d_state=16,
                  mlp_ratio=4.,
                  drop_path=0.,
-                 norm_layer=nn.LayerNorm,
+                 norm_layer=torch.nn.LayerNorm,
                  downsample=None,
                  use_checkpoint=False,
                  img_size=None,
@@ -739,13 +736,15 @@ class ResidualGroup(nn.Module):
 
         # build the last conv layer in each residual state space group
         if resi_connection == '1conv':
-            self.conv = nn.Conv2d(dim, dim, 3, 1, 1)
+            self.conv = torch.nn.Conv2d(dim, dim, 3, 1, 1)
         elif resi_connection == '3conv':
             # to save parameters and memory
-            self.conv = nn.Sequential(
-                nn.Conv2d(dim, dim // 4, 3, 1, 1), nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                nn.Conv2d(dim // 4, dim // 4, 1, 1, 0), nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                nn.Conv2d(dim // 4, dim, 3, 1, 1))
+            self.conv = torch.nn.Sequential(
+                torch.nn.Conv2d(dim, dim // 4, 3, 1, 1),
+                torch.nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                torch.nn.Conv2d(dim // 4, dim // 4, 1, 1, 0),
+                torch.nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                torch.nn.Conv2d(dim // 4, dim, 3, 1, 1))
 
         self.patch_embed = PatchEmbed(
             img_size=img_size, patch_size=patch_size, in_chans=0, embed_dim=dim, norm_layer=None)
@@ -767,7 +766,7 @@ class ResidualGroup(nn.Module):
         return flops
 
 
-class PatchEmbed(nn.Module):
+class PatchEmbed(torch.nn.Module):
     r""" transfer 2D feature map into 1D token sequence
 
     Args:
@@ -779,7 +778,7 @@ class PatchEmbed(nn.Module):
     """
 
     def __init__(self, img_size=224, patch_size=4, in_chans=3, embed_dim=96, norm_layer=None):
-        super().__init__()
+        super(PatchEmbed,self).__init__()
         img_size = to_2tuple(img_size)
         patch_size = to_2tuple(patch_size)
         patches_resolution = [img_size[0] // patch_size[0], img_size[1] // patch_size[1]]
@@ -810,7 +809,7 @@ class PatchEmbed(nn.Module):
         return flops
 
 
-class PatchUnEmbed(nn.Module):
+class PatchUnEmbed(torch.nn.Module):
     r""" return 2D feature map from 1D token sequence
 
     Args:
@@ -822,7 +821,7 @@ class PatchUnEmbed(nn.Module):
     """
 
     def __init__(self, img_size=224, patch_size=4, in_chans=3, embed_dim=96, norm_layer=None):
-        super().__init__()
+        super(PatchUnEmbed,self).__init__()
         img_size = to_2tuple(img_size)
         patch_size = to_2tuple(patch_size)
         patches_resolution = [img_size[0] // patch_size[0], img_size[1] // patch_size[1]]
@@ -844,7 +843,7 @@ class PatchUnEmbed(nn.Module):
 
 
 
-class UpsampleOneStep(nn.Sequential):
+class UpsampleOneStep(torch.nn.Sequential):
     """UpsampleOneStep module (the difference with Upsample is that it always only has 1conv + 1pixelshuffle)
        Used in lightweight SR to save parameters.
 
@@ -857,13 +856,13 @@ class UpsampleOneStep(nn.Sequential):
     def __init__(self, scale, num_feat, num_out_ch):
         self.num_feat = num_feat
         m = []
-        m.append(nn.Conv2d(num_feat, (scale**2) * num_out_ch, 3, 1, 1))
-        m.append(nn.PixelShuffle(scale))
+        m.append(torch.nn.Conv2d(num_feat, (scale**2) * num_out_ch, 3, 1, 1))
+        m.append(torch.nn.PixelShuffle(scale))
         super(UpsampleOneStep, self).__init__(*m)
 
 
 
-class Upsample(nn.Sequential):
+class Upsample(torch.nn.Sequential):
     """Upsample module.
 
     Args:
@@ -875,11 +874,11 @@ class Upsample(nn.Sequential):
         m = []
         if (scale & (scale - 1)) == 0:  # scale = 2^n
             for _ in range(int(math.log(scale, 2))):
-                m.append(nn.Conv2d(num_feat, 4 * num_feat, 3, 1, 1))
-                m.append(nn.PixelShuffle(2))
+                m.append(torch.nn.Conv2d(num_feat, 4 * num_feat, 3, 1, 1))
+                m.append(torch.nn.PixelShuffle(2))
         elif scale == 3:
-            m.append(nn.Conv2d(num_feat, 9 * num_feat, 3, 1, 1))
-            m.append(nn.PixelShuffle(3))
+            m.append(torch.nn.Conv2d(num_feat, 9 * num_feat, 3, 1, 1))
+            m.append(torch.nn.PixelShuffle(3))
         else:
             raise ValueError(f'scale {scale} is not supported. Supported scales: 2^n and 3.')
         super(Upsample, self).__init__(*m)

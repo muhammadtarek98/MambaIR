@@ -1,6 +1,6 @@
 # The Code Implementation of MambaIR model for Real Image Denoising task
 import torch
-from timm.models.layers import DropPath, to_2tuple, trunc_normal_
+from timm.models.layers import to_2tuple, trunc_normal_
 from pdb import set_trace as stx
 import numbers
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_

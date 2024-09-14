@@ -1,12 +1,11 @@
 import math
 import torch
-import torch.nn as nn
-import torch.utils.checkpoint as checkpoint
 
-from basicsr.utils.registry import ARCH_REGISTRY
-from basicsr.archs.arch_util import to_2tuple, trunc_normal_
-
+from MambaIR.basicsr.archs.arch_util import to_2tuple,trunc_normal_
 from einops import rearrange
+
+from MambaIR.realDenoising.basicsr.utils import padding
+
 
 def drop_path(x, drop_prob: float = 0., training: bool = False):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
@@ -23,7 +22,7 @@ def drop_path(x, drop_prob: float = 0., training: bool = False):
     return output
 
 
-class DropPath(nn.Module):
+class DropPath(torch.nn.Module):
     """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
 
     From: https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/layers/drop.py
@@ -37,7 +36,7 @@ class DropPath(nn.Module):
         return drop_path(x, self.drop_prob, self.training)
 
 
-class ChannelAttention(nn.Module):
+class ChannelAttention(torch.nn.Module):
     """Channel attention used in RCAN.
     Args:
         num_feat (int): Channel number of intermediate features.
@@ -46,27 +45,27 @@ class ChannelAttention(nn.Module):
 
     def __init__(self, num_feat, squeeze_factor=16):
         super(ChannelAttention, self).__init__()
-        self.attention = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(num_feat, num_feat // squeeze_factor, 1, padding=0),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(num_feat // squeeze_factor, num_feat, 1, padding=0),
-            nn.Sigmoid())
+        self.attention = torch.nn.Sequential(
+            torch.nn.AdaptiveAvgPool2d(1),
+            torch.nn.Conv2d(in_channels=num_feat,out_channels= num_feat // squeeze_factor,kernel_size= 1, padding=0),
+            torch.nn.ReLU(inplace=True),
+            torch.nn.Conv2d(in_channels=num_feat // squeeze_factor,out_channels= num_feat, kernel_size=1, padding=0),
+            torch.nn.Sigmoid())
 
     def forward(self, x):
         y = self.attention(x)
         return x * y
 
 
-class CAB(nn.Module):
+class CAB(torch.nn.Module):
 
     def __init__(self, num_feat, compress_ratio=3, squeeze_factor=30):
         super(CAB, self).__init__()
 
-        self.cab = nn.Sequential(
-            nn.Conv2d(num_feat, num_feat // compress_ratio, 3, 1, 1),
-            nn.GELU(),
-            nn.Conv2d(num_feat // compress_ratio, num_feat, 3, 1, 1),
+        self.cab = torch.nn.Sequential(
+            torch.nn.Conv2d(in_channels=num_feat,out_channels= num_feat // compress_ratio,kernel_size= 3, stride=1, padding=1),
+            torch.nn.GELU(),
+            torch.nn.Conv2d(in_channels=num_feat // compress_ratio,out_channels= num_feat,kernel_size= 3, stride=1, padding=1),
             ChannelAttention(num_feat, squeeze_factor)
             )
 
@@ -74,16 +73,16 @@ class CAB(nn.Module):
         return self.cab(x)
 
 
-class Mlp(nn.Module):
+class Mlp(torch.nn.Module):
 
-    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
-        super().__init__()
+    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=torch.nn.GELU, drop=0.0):
+        super(Mlp,self).__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
-        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.fc1 = torch.nn.Linear(in_features=in_features,out_features= hidden_features)
         self.act = act_layer()
-        self.fc2 = nn.Linear(hidden_features, out_features)
-        self.drop = nn.Dropout(drop)
+        self.fc2 = torch.nn.Linear(in_features=hidden_features,out_features= out_features)
+        self.drop = torch.nn.Dropout(p=drop)
 
     def forward(self, x):
         x = self.fc1(x)
@@ -126,7 +125,7 @@ def window_reverse(windows, window_size, h, w):
     return x
 
 
-class WindowAttention(nn.Module):
+class WindowAttention(torch.nn.Module):
     r""" Window based multi-head self attention (W-MSA) module with relative position bias.
     It supports both of shifted and non-shifted window.
 
@@ -142,7 +141,7 @@ class WindowAttention(nn.Module):
 
     def __init__(self, dim, window_size, num_heads, qkv_bias=True, qk_scale=None, attn_drop=0., proj_drop=0.):
 
-        super().__init__()
+        super(WindowAttention,self).__init__()
         self.dim = dim
         self.window_size = window_size  # Wh, Ww
         self.num_heads = num_heads
@@ -150,17 +149,17 @@ class WindowAttention(nn.Module):
         self.scale = qk_scale or head_dim**-0.5
 
         # define a parameter table of relative position bias
-        self.relative_position_bias_table = nn.Parameter(
+        self.relative_position_bias_table = torch.nn.Parameter(
             torch.zeros((2 * window_size[0] - 1) * (2 * window_size[1] - 1), num_heads))  # 2*Wh-1 * 2*Ww-1, nH
 
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-        self.attn_drop = nn.Dropout(attn_drop)
-        self.proj = nn.Linear(dim, dim)
+        self.qkv = torch.nn.Linear(in_features=dim,out_features= dim * 3, bias=qkv_bias)
+        self.attn_drop =torch.nn.Dropout(p=attn_drop)
+        self.proj = torch.nn.Linear(in_features=dim,out_features= dim)
 
-        self.proj_drop = nn.Dropout(proj_drop)
+        self.proj_drop = torch.nn.Dropout(p=proj_drop)
 
         trunc_normal_(self.relative_position_bias_table, std=.02)
-        self.softmax = nn.Softmax(dim=-1)
+        self.softmax = torch.nn.Softmax(dim=-1)
 
     def forward(self, x, rpi, mask=None):
         """
@@ -196,7 +195,7 @@ class WindowAttention(nn.Module):
         return x
 
 
-class HAB(nn.Module):
+class HAB(torch.nn.Module):
     r""" Hybrid Attention Block.
 
     Args:
@@ -224,15 +223,15 @@ class HAB(nn.Module):
                  compress_ratio=3,
                  squeeze_factor=30,
                  conv_scale=0.01,
-                 mlp_ratio=4.,
+                 mlp_ratio:float=4.0,
                  qkv_bias=True,
                  qk_scale=None,
-                 drop=0.,
-                 attn_drop=0.,
-                 drop_path=0.,
-                 act_layer=nn.GELU,
-                 norm_layer=nn.LayerNorm):
-        super().__init__()
+                 drop=0.0,
+                 attn_drop:float=0.0,
+                 drop_path:float=0.0,
+                 act_layer=torch.nn.GELU,
+                 norm_layer=torch.nn.LayerNorm):
+        super(HAB,self).__init__()
         self.dim = dim
         self.input_resolution = input_resolution
         self.num_heads = num_heads
@@ -258,7 +257,7 @@ class HAB(nn.Module):
         self.conv_scale = conv_scale
         self.conv_block = CAB(num_feat=dim, compress_ratio=compress_ratio, squeeze_factor=squeeze_factor)
 
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.drop_path = torch.nn.Dropout(drop_path) if drop_path > 0. else torch.nn.Identity()
         self.norm2 = norm_layer(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
@@ -309,7 +308,7 @@ class HAB(nn.Module):
         return x
 
 
-class PatchMerging(nn.Module):
+class PatchMerging(torch.nn.Module):
     r""" Patch Merging Layer.
 
     Args:
@@ -318,11 +317,11 @@ class PatchMerging(nn.Module):
         norm_layer (nn.Module, optional): Normalization layer.  Default: nn.LayerNorm
     """
 
-    def __init__(self, input_resolution, dim, norm_layer=nn.LayerNorm):
-        super().__init__()
+    def __init__(self, input_resolution, dim, norm_layer=torch.nn.LayerNorm):
+        super(PatchMerging,self).__init__()
         self.input_resolution = input_resolution
         self.dim = dim
-        self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
+        self.reduction = torch.nn.Linear(4 * dim, 2 * dim, bias=False)
         self.norm = norm_layer(4 * dim)
 
     def forward(self, x):
@@ -340,7 +339,7 @@ class PatchMerging(nn.Module):
         x1 = x[:, 1::2, 0::2, :]  # b h/2 w/2 c
         x2 = x[:, 0::2, 1::2, :]  # b h/2 w/2 c
         x3 = x[:, 1::2, 1::2, :]  # b h/2 w/2 c
-        x = torch.cat([x0, x1, x2, x3], -1)  # b h/2 w/2 4*c
+        x = torch.cat(tensors=[x0, x1, x2, x3],dim= -1)  # b h/2 w/2 4*c
         x = x.view(b, -1, 4 * c)  # b h/2*w/2 4*c
 
         x = self.norm(x)
@@ -349,7 +348,7 @@ class PatchMerging(nn.Module):
         return x
 
 
-class OCAB(nn.Module):
+class OCAB(torch.nn.Module):
     # overlapping cross-attention block
 
     def __init__(self, dim,
@@ -360,10 +359,10 @@ class OCAB(nn.Module):
                 qkv_bias=True,
                 qk_scale=None,
                 mlp_ratio=2,
-                norm_layer=nn.LayerNorm
+                norm_layer=torch.nn.LayerNorm
                 ):
 
-        super().__init__()
+        super(OCAB,self).__init__()
         self.dim = dim
         self.input_resolution = input_resolution
         self.window_size = window_size
@@ -373,21 +372,21 @@ class OCAB(nn.Module):
         self.overlap_win_size = int(window_size * overlap_ratio) + window_size
 
         self.norm1 = norm_layer(dim)
-        self.qkv = nn.Linear(dim, dim * 3,  bias=qkv_bias)
-        self.unfold = nn.Unfold(kernel_size=(self.overlap_win_size, self.overlap_win_size), stride=window_size, padding=(self.overlap_win_size-window_size)//2)
+        self.qkv = torch.nn.Linear(dim, dim * 3,  bias=qkv_bias)
+        self.unfold = torch.nn.Unfold(kernel_size=(self.overlap_win_size, self.overlap_win_size), stride=window_size, padding=(self.overlap_win_size-window_size)//2)
 
         # define a parameter table of relative position bias
-        self.relative_position_bias_table = nn.Parameter(
+        self.relative_position_bias_table = torch.nn.Parameter(
             torch.zeros((window_size + self.overlap_win_size - 1) * (window_size + self.overlap_win_size - 1), num_heads))  # 2*Wh-1 * 2*Ww-1, nH
 
         trunc_normal_(self.relative_position_bias_table, std=.02)
-        self.softmax = nn.Softmax(dim=-1)
+        self.softmax = torch.nn.Softmax(dim=-1)
 
-        self.proj = nn.Linear(dim,dim)
+        self.proj = torch.nn.Linear(dim,dim)
 
         self.norm2 = norm_layer(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=nn.GELU)
+        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=torch.nn.GELU)
 
     def forward(self, x, x_size, rpi):
         h, w = x_size
@@ -399,7 +398,7 @@ class OCAB(nn.Module):
 
         qkv = self.qkv(x).reshape(b, h, w, 3, c).permute(3, 0, 4, 1, 2) # 3, b, c, h, w
         q = qkv[0].permute(0, 2, 3, 1) # b, h, w, c
-        kv = torch.cat((qkv[1], qkv[2]), dim=1) # b, 2*c, h, w
+        kv = torch.cat(tensors=(qkv[1], qkv[2]), dim=1) # b, 2*c, h, w
 
         # partition windows
         q_windows = window_partition(q, self.window_size)  # nw*b, window_size, window_size, c
@@ -438,7 +437,7 @@ class OCAB(nn.Module):
         return x
 
 
-class AttenBlocks(nn.Module):
+class AttenBlocks(torch.nn.Module):
     """ A series of attention blocks for one RHAG.
 
     Args:
@@ -468,40 +467,29 @@ class AttenBlocks(nn.Module):
                  squeeze_factor,
                  conv_scale,
                  overlap_ratio,
-                 mlp_ratio=4.,
+                 mlp_ratio:float=4.0,
                  qkv_bias=True,
                  qk_scale=None,
-                 drop=0.,
-                 attn_drop=0.,
-                 drop_path=0.,
-                 norm_layer=nn.LayerNorm,
+                 drop=0.0,
+                 attn_drop=0.0,
+                 drop_path:float=0.0,
+                 norm_layer=torch.nn.LayerNorm,
                  downsample=None,
                  use_checkpoint=False):
 
-        super().__init__()
+        super(AttenBlocks,self).__init__()
         self.dim = dim
         self.input_resolution = input_resolution
         self.depth = depth
         self.use_checkpoint = use_checkpoint
 
         # build blocks
-        self.blocks = nn.ModuleList([
-            HAB(
-                dim=dim,
-                input_resolution=input_resolution,
-                num_heads=num_heads,
-                window_size=window_size,
-                shift_size=0 if (i % 2 == 0) else window_size // 2,
-                compress_ratio=compress_ratio,
-                squeeze_factor=squeeze_factor,
-                conv_scale=conv_scale,
-                mlp_ratio=mlp_ratio,
-                qkv_bias=qkv_bias,
-                qk_scale=qk_scale,
-                drop=drop,
-                attn_drop=attn_drop,
-                drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
-                norm_layer=norm_layer) for i in range(depth)
+        self.blocks = torch.nn.ModuleList([
+            HAB(dim=dim, input_resolution=input_resolution, num_heads=num_heads, window_size=window_size,
+                shift_size=0 if (i % 2 == 0) else window_size // 2, compress_ratio=compress_ratio,
+                squeeze_factor=squeeze_factor, conv_scale=conv_scale, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias,
+                qk_scale=qk_scale, drop=drop, attn_drop=attn_drop,
+                drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path, norm_layer=norm_layer) for i in range(depth)
         ])
 
         # OCAB
@@ -534,7 +522,7 @@ class AttenBlocks(nn.Module):
         return x
 
 
-class RHAG(nn.Module):
+class RHAG(torch.nn.Module):
     """Residual Hybrid Attention Group (RHAG).
 
     Args:
@@ -571,9 +559,9 @@ class RHAG(nn.Module):
                  qkv_bias=True,
                  qk_scale=None,
                  drop=0.,
-                 attn_drop=0.,
-                 drop_path=0.,
-                 norm_layer=nn.LayerNorm,
+                 attn_drop=0.0,
+                 drop_path=0.0,
+                 norm_layer=torch.nn.LayerNorm,
                  downsample=None,
                  use_checkpoint=False,
                  img_size=224,
@@ -605,9 +593,9 @@ class RHAG(nn.Module):
             use_checkpoint=use_checkpoint)
 
         if resi_connection == '1conv':
-            self.conv = nn.Conv2d(dim, dim, 3, 1, 1)
+            self.conv = torch.nn.Conv2d(in_channels=dim,out_channels= dim,kernel_size= 3,stride= 1, padding=1)
         elif resi_connection == 'identity':
-            self.conv = nn.Identity()
+            self.conv = torch.nn.Identity()
 
         self.patch_embed = PatchEmbed(
             img_size=img_size, patch_size=patch_size, in_chans=0, embed_dim=dim, norm_layer=None)
@@ -619,7 +607,7 @@ class RHAG(nn.Module):
         return self.patch_embed(self.conv(self.patch_unembed(self.residual_group(x, x_size, params), x_size))) + x
 
 
-class PatchEmbed(nn.Module):
+class PatchEmbed(torch.nn.Module):
     r""" Image to Patch Embedding
 
     Args:
@@ -631,7 +619,7 @@ class PatchEmbed(nn.Module):
     """
 
     def __init__(self, img_size=224, patch_size=4, in_chans=3, embed_dim=96, norm_layer=None):
-        super().__init__()
+        super(PatchEmbed,self).__init__()
         img_size = to_2tuple(img_size)
         patch_size = to_2tuple(patch_size)
         patches_resolution = [img_size[0] // patch_size[0], img_size[1] // patch_size[1]]
@@ -655,7 +643,7 @@ class PatchEmbed(nn.Module):
         return x
 
 
-class PatchUnEmbed(nn.Module):
+class PatchUnEmbed(torch.nn.Module):
     r""" Image to Patch Unembedding
 
     Args:
@@ -667,7 +655,7 @@ class PatchUnEmbed(nn.Module):
     """
 
     def __init__(self, img_size=224, patch_size=4, in_chans=3, embed_dim=96, norm_layer=None):
-        super().__init__()
+        super(PatchUnEmbed,self).__init__()
         img_size = to_2tuple(img_size)
         patch_size = to_2tuple(patch_size)
         patches_resolution = [img_size[0] // patch_size[0], img_size[1] // patch_size[1]]
@@ -684,30 +672,28 @@ class PatchUnEmbed(nn.Module):
         return x
 
 
-class Upsample(nn.Sequential):
+class Upsample(torch.nn.Sequential):
     """Upsample module.
-
     Args:
         scale (int): Scale factor. Supported scales: 2^n and 3.
         num_feat (int): Channel number of intermediate features.
     """
-
     def __init__(self, scale, num_feat):
         m = []
         if (scale & (scale - 1)) == 0:  # scale = 2^n
             for _ in range(int(math.log(scale, 2))):
-                m.append(nn.Conv2d(num_feat, 4 * num_feat, 3, 1, 1))
-                m.append(nn.PixelShuffle(2))
+                m.append(torch.nn.Conv2d(in_channels=num_feat,out_channels= 4 * num_feat,kernel_size= 3,stride= 1, padding=1))
+                m.append(torch.nn.PixelShuffle(upscale_factor=2))
         elif scale == 3:
-            m.append(nn.Conv2d(num_feat, 9 * num_feat, 3, 1, 1))
-            m.append(nn.PixelShuffle(3))
+            m.append(torch.nn.Conv2d(in_channels=num_feat, out_channels=9 * num_feat, kernel_size=3,stride= 1, padding=1))
+            m.append(torch.nn.PixelShuffle(upscale_factor=3))
         else:
             raise ValueError(f'scale {scale} is not supported. ' 'Supported scales: 2^n and 3.')
         super(Upsample, self).__init__(*m)
 
 
 
-class HAT(nn.Module):
+class HAT(torch.nn.Module):
     r""" Hybrid Attention Transformer
         A PyTorch implementation of : `Activating More Pixels in Image Super-Resolution Transformer`.
         Some codes are based on SwinIR.
@@ -731,7 +717,7 @@ class HAT(nn.Module):
         use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False
         upscale: Upscale factor. 2/3/4/8 for image SR, 1 for denoising and compress artifact reduction
         img_range: Image range. 1. or 255.
-        upsampler: The reconstruction reconstruction module. 'pixelshuffle'/'pixelshuffledirect'/'nearest+conv'/None
+        upsampler: The reconstruction  module. 'pixelshuffle'/'pixelshuffledirect'/'nearest+conv'/None
         resi_connection: The convolutional block before residual connection. '1conv'/'3conv'
     """
 
@@ -753,7 +739,7 @@ class HAT(nn.Module):
                  drop_rate=0.,
                  attn_drop_rate=0.,
                  drop_path_rate=0.1,
-                 norm_layer=nn.LayerNorm,
+                 norm_layer=torch.nn.LayerNorm,
                  ape=False,
                  patch_norm=True,
                  use_checkpoint=False,
@@ -787,7 +773,7 @@ class HAT(nn.Module):
         self.register_buffer('relative_position_index_OCA', relative_position_index_OCA)
 
         # ------------------------- 1, shallow feature extraction ------------------------- #
-        self.conv_first = nn.Conv2d(num_in_ch, embed_dim, 3, 1, 1)
+        self.conv_first = torch.nn.Conv2d(in_channels=num_in_ch,out_channels= embed_dim,kernel_size= 3,stride= 1, padding=1)
 
         # ------------------------- 2, deep feature extraction ------------------------- #
         self.num_layers = len(depths)
@@ -818,16 +804,16 @@ class HAT(nn.Module):
 
         # absolute position embedding
         if self.ape:
-            self.absolute_pos_embed = nn.Parameter(torch.zeros(1, num_patches, embed_dim))
+            self.absolute_pos_embed = torch.nn.Parameter(torch.zeros(1, num_patches, embed_dim))
             trunc_normal_(self.absolute_pos_embed, std=.02)
 
-        self.pos_drop = nn.Dropout(p=drop_rate)
+        self.pos_drop = DropPath(drop_prob=drop_rate)
 
         # stochastic depth
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]  # stochastic depth decay rule
 
         # build Residual Hybrid Attention Groups (RHAG)
-        self.layers = nn.ModuleList()
+        self.layers = torch.nn.ModuleList()
         for i_layer in range(self.num_layers):
             layer = RHAG(
                 dim=embed_dim,
@@ -856,28 +842,29 @@ class HAT(nn.Module):
 
         # build the last conv layer in deep feature extraction
         if resi_connection == '1conv':
-            self.conv_after_body = nn.Conv2d(embed_dim, embed_dim, 3, 1, 1)
+            self.conv_after_body = torch.nn.Conv2d(embed_dim, embed_dim, 3, 1, 1)
         elif resi_connection == 'identity':
-            self.conv_after_body = nn.Identity()
+            self.conv_after_body = torch.nn.Identity()
 
         # ------------------------- 3, high quality image reconstruction ------------------------- #
         if self.upsampler == 'pixelshuffle':
             # for classical SR
-            self.conv_before_upsample = nn.Sequential(
-                nn.Conv2d(embed_dim, num_feat, 3, 1, 1), nn.LeakyReLU(inplace=True))
+            self.conv_before_upsample = torch.nn.Sequential(
+                torch.nn.Conv2d(in_channels=embed_dim,out_channels= num_feat, kernel_size=3, stride=1, padding=1),
+                torch.nn.LeakyReLU(inplace=True))
             self.upsample = Upsample(upscale, num_feat)
-            self.conv_last = nn.Conv2d(num_feat, num_out_ch, 3, 1, 1)
+            self.conv_last = torch.nn.Conv2d(in_channels=num_feat,out_channels= num_out_ch, kernel_size=3, stride=1, padding=1)
 
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
+        if isinstance(m, torch.nn.Linear):
             trunc_normal_(m.weight, std=.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
+            if isinstance(m, torch.nn.Linear) and m.bias is not None:
+                torch.nn.init.constant_(m.bias, 0)
+        elif isinstance(m, torch.nn.LayerNorm):
+            torch.nn.init.constant_(m.bias, 0)
+            torch.nn.init.constant_(m.weight, 1.0)
 
     def calculate_rpi_sa(self):
         # calculate relative position index for SA
@@ -971,16 +958,13 @@ class HAT(nn.Module):
     def forward_train(self, x):
         self.mean = self.mean.type_as(x)
         x = (x - self.mean) * self.img_range
-
         if self.upsampler == 'pixelshuffle':
             # for classical SR
             x = self.conv_first(x)
             x = self.conv_after_body(self.forward_features(x)) + x
             x = self.conv_before_upsample(x)
             x = self.conv_last(self.upsample(x))
-
         x = x / self.img_range + self.mean
-
         return x
 
 
@@ -991,13 +975,13 @@ class HAT(nn.Module):
         window_size = 16
         h_pad = (h_old // window_size + 1) * window_size - h_old
         w_pad = (w_old // window_size + 1) * window_size - w_old
-        x = torch.cat([x, torch.flip(x, [2])], 2)[:, :, :h_old + h_pad,:]  # 对LQ进行边缘的拼接，经过超分之后在把边缘拼接给结案回去，HR是不动的
-        x = torch.cat([x, torch.flip(x, [3])], 3)[:, :, :, :w_old + w_pad]
+        x = torch.cat(tensors=[x, torch.flip(x, dims=[2])], dim=2)[:, :, :h_old + h_pad,:]  # 对LQ进行边缘的拼接，经过超分之后在把边缘拼接给结案回去，HR是不动的
+        x = torch.cat(tensors=[x, torch.flip(x, dims=[3])], dim=3)[:, :, :, :w_old + w_pad]
         #with torch.no_grad():
         out = self.forward_train(x)
         out = out[..., :h_old * scale, : w_old * scale]
-
         return out
 
 
-
+model=HAT()
+print(model)

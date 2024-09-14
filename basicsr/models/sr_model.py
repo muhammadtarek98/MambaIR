@@ -1,13 +1,12 @@
 import torch
 from collections import OrderedDict
-from os import path as osp
 from tqdm import tqdm
-
-from basicsr.archs import build_network
-from basicsr.losses import build_loss
-from basicsr.metrics import calculate_metric
-from basicsr.utils import get_root_logger, imwrite, tensor2img
-from basicsr.utils.registry import MODEL_REGISTRY
+import os
+from MambaIR.basicsr.archs import build_network
+from MambaIR.basicsr.losses import build_loss
+from MambaIR.basicsr.metrics import calculate_metric
+from MambaIR.basicsr.utils import get_root_logger, imwrite, tensor2img
+from MambaIR.basicsr.utils.registry import MODEL_REGISTRY
 from .base_model import BaseModel
 
 
@@ -201,7 +200,7 @@ class SRModel(BaseModel):
             pbar = tqdm(total=len(dataloader), unit='image')
 
         for idx, val_data in enumerate(dataloader):
-            img_name = osp.splitext(osp.basename(val_data['lq_path'][0]))[0]
+            img_name = os.path.splitext(os.path.basename(val_data['lq_path'][0]))[0]
             self.feed_data(val_data)
             self.test()
 
@@ -220,14 +219,14 @@ class SRModel(BaseModel):
 
             if save_img:
                 if self.opt['is_train']:
-                    save_img_path = osp.join(self.opt['path']['visualization'], img_name,
+                    save_img_path = os.path.join(self.opt['path']['visualization'], img_name,
                                              f'{img_name}_{current_iter}.png')
                 else:
                     if self.opt['val']['suffix']:
-                        save_img_path = osp.join(self.opt['path']['visualization'], dataset_name,
+                        save_img_path = os.path.join(self.opt['path']['visualization'], dataset_name,
                                                  f'{img_name}_{self.opt["val"]["suffix"]}.png')
                     else:
-                        save_img_path = osp.join(self.opt['path']['visualization'], dataset_name,
+                        save_img_path = os.path.join(self.opt['path']['visualization'], dataset_name,
                                                  f'{img_name}_{self.opt["name"]}.png')
                 imwrite(sr_img, save_img_path)
 

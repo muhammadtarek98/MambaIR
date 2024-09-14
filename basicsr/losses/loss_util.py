@@ -1,6 +1,5 @@
 import functools
-from torch.nn import functional as F
-
+import torch
 
 def reduce_loss(loss, reduction):
     """Reduce loss as specified.
@@ -12,7 +11,7 @@ def reduce_loss(loss, reduction):
     Returns:
         Tensor: Reduced loss tensor.
     """
-    reduction_enum = F._Reduction.get_enum(reduction)
+    reduction_enum = torch.nn.functional._Reduction.get_enum(reduction)
     # none: 0, elementwise_mean:1, sum: 2
     if reduction_enum == 0:
         return loss

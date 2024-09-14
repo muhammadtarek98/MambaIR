@@ -1,8 +1,6 @@
 import torch
-from torch.nn import functional as F
-
-from basicsr.utils.registry import MODEL_REGISTRY
-from basicsr.models.sr_model import SRModel
+from MambaIR.basicsr.utils.registry import MODEL_REGISTRY
+from MambaIR.basicsr.models.sr_model import SRModel
 
 
 @MODEL_REGISTRY.register()
@@ -20,7 +18,7 @@ class MambaIRModel(SRModel):
             mod_pad_h = split_token_h - h % split_token_h
         if w % split_token_w != 0:
             mod_pad_w = split_token_w - w % split_token_w
-        img = F.pad(self.lq, (0, mod_pad_w, 0, mod_pad_h), 'reflect')
+        img = torch.nn.functional.pad(self.lq, (0, mod_pad_w, 0, mod_pad_h), 'reflect')
         _, _, H, W = img.size()
         split_h = H // split_token_h  # height of each partition
         split_w = W // split_token_w  # width of each partition
