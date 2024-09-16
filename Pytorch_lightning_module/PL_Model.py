@@ -5,7 +5,7 @@ from Dataset import CustomDataset
 from Discriminator import Discriminator
 import torchmetrics
 from MambaIR.basicsr.losses.losses import charbonnier_loss
-from MambaIR.analysis.model_zoo.mambaIR import buildMambaIR
+from MambaIR.analysis.model_zoo.mambaIR import buildMambaIR,buildMambaIR_light
 import albumentations as A
 class CycleMambaGAN(pl.LightningModule):
     def __init__(self,batch_size:int, train_loader=None,
@@ -20,8 +20,8 @@ class CycleMambaGAN(pl.LightningModule):
         self.val_loader = val_loader
         self.cycle_lambda = cycle_lambda
         self.identity_lambda = identity_lambda
-        self.lr_generator=buildMambaIR()
-        self.hr_generator=buildMambaIR()
+        self.lr_generator=buildMambaIR_light()
+        self.hr_generator=buildMambaIR_light()
         self.lr_discriminator=Discriminator()
         self.hr_discriminator=Discriminator()
         self.learning_rate=lr
@@ -86,48 +86,48 @@ class CycleMambaGAN(pl.LightningModule):
         hr_generator_LR_schedular = self.lr_schedulers()[3]
         hr_discriminator_optimizer.zero_grad()
         lr_discriminator_optimizer.zero_grad()
-        lr_disc_loss = self.discriminator_loss(discriminator=self.discriminator_hr,
-                                               generator=self.generator_hr,
+        lr_disc_loss = self.discriminator_loss(discriminator=self.hr_discriminator,
+                                               generator=self.hr_generator,
                                                fake=lr_image, real=hr_image)
-        hr_disc_loss = self.discriminator_loss(discriminator=self.discriminator_lr,
-                                               generator=self.generator_lr,
+        hr_disc_loss = self.discriminator_loss(discriminator=self.lr_discriminator,
+                                               generator=self.lr_generator,
                                                fake=hr_image,
                                                real=lr_image)
         total_disc_loss = hr_disc_loss + lr_disc_loss
         self.manual_backward(total_disc_loss, retain_graph=True)
         hr_discriminator_optimizer.step()
         lr_discriminator_optimizer.step()
-        hr_discriminator_LR_schedular.step(hr_disc_loss)
-        lr_discriminator_LR_schedular.step(lr_disc_loss)
+        hr_discriminator_LR_schedular.step(lr_disc_loss)
+        lr_discriminator_LR_schedular.step(hr_disc_loss)
 
 
         lr_generator_optimizer.zero_grad()
         hr_generator_optimizer.zero_grad()
-        lr_gen_loss = self.generator_loss(self.discriminator_lr, fake_lr)
-        hr_gen_loss = self.generator_loss(self.discriminator_hr, fake_hr)
+        lr_gen_loss = self.generator_loss(self.lr_discriminator, fake_lr)
+        hr_gen_loss = self.generator_loss(self.hr_discriminator, fake_hr)
 
 
-        cycled_lr = self.generator_lr(fake_hr)
-        cycled_hr = self.generator_hr(fake_lr)
+        cycled_lr = self.lr_generator(fake_hr)
+        cycled_hr = self.hr_generator(fake_lr)
         cycled_lr_loss = self.cycle_loss(real=lr_image, cycled=cycled_lr)
         cycled_hr_loss = self.cycle_loss(real=hr_image, cycled=cycled_hr)
         total_cycle_loss=(cycled_hr_loss*self.cycle_lambda)+(cycled_lr_loss*self.cycle_lambda)
 
 
-        lr_identity = self.generator_lr(lr_image)
-        hr_identity = self.generator_hr(hr_image)
+        lr_identity = self.lr_generator(lr_image)
+        hr_identity = self.hr_generator(hr_image)
         lr_identity_loss = self.identity_loss(real=lr_image, identity=lr_identity)
         hr_identity_loss = self.identity_loss(real=hr_image, identity=hr_identity)
         total_identity_loss=(self.identity_lambda*lr_identity_loss)+(self.identity_lambda*hr_identity_loss)
 
 
-        tota_gen_loss=lr_gen_loss+hr_gen_loss+total_identity_loss+total_cycle_loss
-        self.manual_backward(tota_gen_loss,retain_graph=True)
+        total_gen_loss=lr_gen_loss+hr_gen_loss+total_identity_loss+total_cycle_loss
+        self.manual_backward(total_gen_loss,retain_graph=True)
         lr_generator_optimizer.step()
         hr_generator_optimizer.step()
 
-        lr_generator_LR_schedular.step(lr_gen_loss)
-        hr_generator_LR_schedular.step(hr_gen_loss)
+        lr_generator_LR_schedular.step()
+        hr_generator_LR_schedular.step()
         log={"total_discriminator_loss":total_disc_loss,
              "lr_discriminator_loss": lr_disc_loss,
              "total_generator_loss":total_gen_loss,
@@ -200,13 +200,13 @@ class CycleMambaGAN(pl.LightningModule):
     def configure_optimizers(self):
         self.hparams.lr = self.learning_rate
         hr_discriminator_optimizer = torch.optim.Adam(lr=self.learning_rate,
-                                                      params=self.discriminator_hr.parameters())
+                                                      params=self.hr_discriminator.parameters())
         lr_discriminator_optimizer = torch.optim.Adam(lr=self.learning_rate,
-                                                      params=self.discriminator_lr.parameters())
+                                                      params=self.lr_discriminator.parameters())
         lr_generator_optimizer = torch.optim.Adam(lr=self.learning_rate,
-                                                  params=self.generator_lr.parameters())
+                                                  params=self.lr_generator.parameters())
         hr_generator_optimizer = torch.optim.Adam(lr=self.learning_rate,
-                                                  params=self.generator_hr.parameters())
+                                                  params=self.hr_generator.parameters())
         hr_discriminator_LR_schedular = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer=hr_discriminator_optimizer)
         hr_generator_LR_schedular = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=hr_generator_optimizer,
                                                                                T_max=4)
@@ -226,7 +226,7 @@ batch_size = 1
 device_type = "gpu" if torch.cuda.is_available() else "cpu"  # Use GPU if available
 
 transform = A.Compose(is_check_shapes=False,transforms=[
-    A.Resize(height=128, width=128),
+    A.Resize(height=64, width=64),
     A.ToFloat(),
     #A.Normalize(mean=[0.24472233,0.50500972,0.4443582],std=[0.20768219,0.24286765,0.2468539 ],always_apply=True),
     A.pytorch.ToTensorV2()],
@@ -266,6 +266,7 @@ trainer = pl.Trainer(
     callbacks=[early_stop_callback, checkpoint_callback],
     logger=logger,
     enable_progress_bar=True,
-    fast_dev_run=True,
+    fast_dev_run=False,
 )
+trainer.fit(model=model,train_dataloaders=data_loader)
 #print(model)

@@ -15,7 +15,7 @@ class ChannelAttention(torch.nn.Module):
         squeeze_factor (int): Channel squeeze factor. Default: 16.
     """
 
-    def __init__(self, num_feat, squeeze_factor=16):
+    def __init__(self, num_feat:int, squeeze_factor:int=16):
         super(ChannelAttention, self).__init__()
         self.attention = torch.nn.Sequential(
             torch.nn.AdaptiveAvgPool2d(1),
@@ -31,7 +31,7 @@ class ChannelAttention(torch.nn.Module):
 
 class CAB(torch.nn.Module):
     # compress_ratio=6 for light SR and compress_ratio=3 for classic SR
-    def __init__(self, num_feat, is_light_sr= False, compress_ratio=6,squeeze_factor=30):
+    def __init__(self, num_feat:int, is_light_sr:bool= False, compress_ratio:int=6,squeeze_factor:int=30):
         super(CAB, self).__init__()
         self.cab = torch.nn.Sequential(
             torch.nn.Conv2d(in_channels=num_feat,out_channels= num_feat // compress_ratio, kernel_size=3, stride=1, padding=1),
@@ -45,7 +45,8 @@ class CAB(torch.nn.Module):
 
 
 class Mlp(torch.nn.Module):
-    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=torch.nn.GELU, drop=0.0):
+    def __init__(self, in_features, hidden_features=None,
+                 out_features=None, act_layer:torch.nn.Module=torch.nn.GELU, drop:float=0.0):
         super(Mlp,self).__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
@@ -101,19 +102,19 @@ class SS2D(torch.nn.Module):
     def __init__(
             self,
             d_model,
-            d_state=16,
-            d_conv=3,
-            expand=2.,
-            dt_rank="auto",
-            dt_min=0.001,
-            dt_max=0.1,
-            dt_init="random",
-            dt_scale=1.0,
-            dt_init_floor=1e-4,
-            dropout=0.,
-            conv_bias=True,
-            bias=False,
-            device=None,
+            d_state:int=16,
+            d_conv:int=3,
+            expand:float=2.,
+            dt_rank:str="auto",
+            dt_min:float=0.001,
+            dt_max:float=0.1,
+            dt_init:str="random",
+            dt_scale:float=1.0,
+            dt_init_floor:float=1e-4,
+            dropout:float=0.,
+            conv_bias:bool=True,
+            bias:bool=False,
+            device:bool=None,
             dtype=None,
             **kwargs,
     ):
@@ -297,14 +298,14 @@ class VSSBlock(torch.nn.Module):
 
 class BasicLayer(torch.nn.Module):
     def __init__(self,
-                 dim,
+                 dim:int,
                  input_resolution,
                  depth,
-                 mlp_ratio=2.,
-                 drop_path=0.,
-                 norm_layer=torch.nn.LayerNorm,
+                 mlp_ratio:float=2.,
+                 drop_path:float=0.,
+                 norm_layer:torch.nn.Module=torch.nn.LayerNorm,
                  downsample=None,
-                 use_checkpoint=False):
+                 use_checkpoint:bool=False):
 
         super(BasicLayer,self).__init__()
         self.dim = dim
@@ -354,20 +355,20 @@ class BasicLayer(torch.nn.Module):
 
 class MambaIR(torch.nn.Module):
     def __init__(self,
-                 img_size=64,
-                 patch_size=1,
-                 in_chans=3,
-                 embed_dim=180,
-                 depths=(6, 6, 6, 6, 6, 6),
-                 mlp_ratio=2.,
-                 drop_rate=0.,
-                 norm_layer=torch.nn.LayerNorm,
-                 patch_norm=True,
-                 use_checkpoint=False,
-                 upscale=2,
-                 img_range=1.,
-                 upsampler='pixelshuffle',
-                 resi_connection='1conv',
+                 img_size:int=64,
+                 patch_size:int=1,
+                 in_chans:int=3,
+                 embed_dim:int=180,
+                 depths:list[int]=[6, 6, 6, 6, 6, 6],
+                 mlp_ratio:float=2.0,
+                 drop_rate:float=0.0,
+                 norm_layer:torch.nn.Module=torch.nn.LayerNorm,
+                 patch_norm:bool=True,
+                 use_checkpoint:bool=False,
+                 upscale:int=2,
+                 img_range:float=1.0,
+                 upsampler:str='pixelshuffle',
+                 resi_connection:str='1conv',
                  **kwargs):
         super(MambaIR, self).__init__()
         num_in_ch = in_chans
@@ -502,7 +503,7 @@ class MambaIR(torch.nn.Module):
         return flops
 
 class UpsampleOneStep(torch.nn.Module):
-    def __init__(self, scale, num_feat, num_out_ch):
+    def __init__(self, scale:int, num_feat:int, num_out_ch:int):
         super(UpsampleOneStep, self).__init__()
         self.num_feat = num_feat
         self.conv=torch.nn.Conv2d(in_channels=num_feat,out_channels= (scale**2) * num_out_ch,kernel_size= 3, stride=1, padding=1)
@@ -516,14 +517,14 @@ class ResidualGroup(torch.nn.Module):
                  dim,
                  input_resolution,
                  depth,
-                 mlp_ratio=2.,
-                 drop_path=0.,
-                 norm_layer=torch.nn.LayerNorm,
+                 mlp_ratio:float=2.,
+                 drop_path:float=0.,
+                 norm_layer:torch.nn.Module=torch.nn.LayerNorm,
                  downsample=None,
-                 use_checkpoint=False,
-                 img_size=None,
-                 patch_size=None,
-                 resi_connection='1conv'):
+                 use_checkpoint:bool=False,
+                 img_size:int=None,
+                 patch_size:int=None,
+                 resi_connection:str='1conv'):
         super(ResidualGroup, self).__init__()
 
         self.dim = dim
@@ -568,7 +569,7 @@ class ResidualGroup(torch.nn.Module):
 
 
 class PatchEmbed(torch.nn.Module):
-    def __init__(self, img_size=224, patch_size=4, in_chans=3, embed_dim=96, norm_layer=None):
+    def __init__(self, img_size:int=224, patch_size:int=4, in_chans:int=3, embed_dim:int=96, norm_layer:torch.nn.Module=None):
         super(PatchEmbed,self).__init__()
         img_size = to_2tuple(img_size)
         patch_size = to_2tuple(patch_size)
@@ -633,14 +634,14 @@ class Upsample(torch.nn.Sequential):
 
 
 
-def buildMambaIR(upscale=2):
+def buildMambaIR(upscale=1):
     return MambaIR(img_size=128,
                    patch_size=1,
                    in_chans=3,
                    embed_dim=180,
-                   depths=(6, 6, 6, 6, 6, 6),
-                   mlp_ratio=2.,
-                   drop_rate=0.,
+                   depths=[6, 6, 6, 6, 6, 6],
+                   mlp_ratio=2.0,
+                   drop_rate=0.0,
                    norm_layer=torch.nn.LayerNorm,
                    patch_norm=True,
                    use_checkpoint=True,
@@ -650,31 +651,13 @@ def buildMambaIR(upscale=2):
                    resi_connection='1conv')
 
 
-def buildMambaIR_light(upscale=2):
-    return MambaIR(img_size=64,
-                   patch_size=1,
-                   in_chans=3,
-                   embed_dim=60,
-                   depths=(6, 6, 6, 6),
-                   mlp_ratio=1.5,
-                   drop_rate=0.,
-                   norm_layer=torch.nn.LayerNorm,
-                   patch_norm=True,
-                   use_checkpoint=False,
-                   upscale=upscale,
-                   img_range=1.,
-                   upsampler='pixelshuffledirect',
-                   resi_connection='1conv')
+def buildMambaIR_light(upscale=1):
+    return MambaIR(img_size=64, patch_size=1, in_chans=3, embed_dim=60, depths=(6, 6, 6, 6), mlp_ratio=1.5,
+                   drop_rate=0., norm_layer=torch.nn.LayerNorm, patch_norm=True, use_checkpoint=False, upscale=upscale,
+                   img_range=1., upsampler='pixelshuffledirect', resi_connection='1conv')
 
-
-model=MambaIR(in_chans=3,
-              upscale=2,
-              img_size=64,
-              img_range=1,
-              depths=[6, 6, 6, 6, 6, 6],
-              embed_dim=180,
-              mlp_ratio=2,upsampler="pixelshuffle",
-              resi_connection="1conv")
+"""
+model=buildMambaIR()
 state_dict=torch.load(f="/home/muahmmad/projects/Image_enhancement/MambaIR/experiments/pretrained_models/MambaIR-real.pth",
                       map_location="cuda")
 #for keys in state_dict["params"]:
@@ -683,3 +666,4 @@ model.load_state_dict(state_dict=state_dict["params"])
 model=model.to(device="cuda")
 x=torch.randn(size=(1,3,64,64)).to("cuda")
 torchinfo.summary(model=model,input_data=x)
+"""

@@ -513,6 +513,21 @@ class MambaIR(torch.nn.Module):
                  upsampler:str='',
                  resi_connection:str='1conv',
                  **kwargs):
+        """    upscale: 4
+    in_chans: 3
+    img_size: 64
+    window_size: 16
+    compress_ratio: 3
+    squeeze_factor: 30
+    conv_scale: 0.01
+    overlap_ratio: 0.5
+    img_range: 1.0
+    depths: [6, 6, 6, 6, 6, 6]
+    embed_dim: 180
+    num_heads: [6, 6, 6, 6, 6, 6]
+    mlp_ratio: 2
+    upsampler: pixelshuffle
+    resi_connection: 1conv"""
         super(MambaIR, self).__init__()
         num_in_ch = in_chans
         num_out_ch = in_chans
