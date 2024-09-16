@@ -10,7 +10,7 @@ from torch.nn.modules.batchnorm import _BatchNorm
 
 
 @torch.no_grad()
-def default_init_weights(module_list, scale=1, bias_fill=0, **kwargs):
+def default_init_weights(module_list, scale:float=1.0, bias_fill:float=0.0, **kwargs):
     """Initialize network weights.
 
     Args:
@@ -40,11 +40,11 @@ def default_init_weights(module_list, scale=1, bias_fill=0, **kwargs):
                     m.bias.data.fill_(bias_fill)
 
 
-def make_layer(basic_block, num_basic_block, **kwarg):
+def make_layer(basic_block:torch.nn.Module, num_basic_block:int, **kwarg):
     """Make layers by stacking the same blocks.
 
     Args:
-        basic_block (nn.module): nn.module class for basic block.
+        basic_block (nn.module): nn. module class for basic block.
         num_basic_block (int): number of blocks.
 
     Returns:
@@ -71,13 +71,12 @@ class ResidualBlockNoBN(torch.nn.Module):
             otherwise, use default_init_weights. Default: False.
     """
 
-    def __init__(self, num_feat=64, res_scale=1, pytorch_init=False):
+    def __init__(self, num_feat:int=64, res_scale:float=1, pytorch_init:bool=False):
         super(ResidualBlockNoBN, self).__init__()
         self.res_scale = res_scale
-        self.conv1 = torch.nn.Conv2d(in_channels=num_feat,out_channels= num_feat, kernel_size=3, stride=1, padding=1, bias=True)
-        self.conv2 = torch.nn.Conv2d(in_channels=num_feat,out_channels= num_feat, kernel_size=3, stride=1,padding= 1, bias=True)
+        self.conv1 = torch.nn.Conv2d(in_channels=num_feat,out_channels= num_feat, kernel_size=3, stride=1, padding=1, bias=True,padding_mode="reflect")
+        self.conv2 = torch.nn.Conv2d(in_channels=num_feat,out_channels= num_feat, kernel_size=3, stride=1,padding= 1, bias=True,padding_mode="reflect")
         self.relu = torch.nn.ReLU(inplace=True)
-
         if not pytorch_init:
             default_init_weights(module_list=[self.conv1, self.conv2],scale= 0.1)
 
@@ -95,21 +94,25 @@ class Upsample(torch.nn.Sequential):
         num_feat (int): Channel number of intermediate features.
     """
 
-    def __init__(self, scale, num_feat):
+    def __init__(self, scale:int, num_feat:int):
         m = []
         if (scale & (scale - 1)) == 0:  # scale = 2^n
             for _ in range(int(math.log(scale, 2))):
-                m.append(torch.nn.Conv2d(in_channels=num_feat,out_channels= 4 * num_feat,kernel_size= 3, stride=1, padding=1))
+                m.append(torch.nn.Conv2d(in_channels=num_feat,out_channels= 4 * num_feat,
+                                         kernel_size= 3, stride=1,
+                                         padding=1,padding_mode="reflect"))
                 m.append(torch.nn.PixelShuffle(upscale_factor=2))
         elif scale == 3:
-            m.append(torch.nn.Conv2d(in_channels=num_feat,out_channels= 9 * num_feat, kernel_size=3, stride=1,padding= 1))
+            m.append(torch.nn.Conv2d(in_channels=num_feat,out_channels= 9 * num_feat,
+                                     kernel_size=3, stride=1,
+                                     padding= 1,padding_mode="reflect"))
             m.append(torch.nn.PixelShuffle(upscale_factor=3))
         else:
             raise ValueError(f'scale {scale} is not supported. Supported scales: 2^n and 3.')
         super(Upsample, self).__init__(*m)
 
 
-def flow_warp(x, flow, interp_mode='bilinear', padding_mode='zeros', align_corners=True):
+def flow_warp(x:torch.Tensor, flow:torch.Tensor, interp_mode:str='bilinear', padding_mode:str='zeros', align_corners:bool=True):
     """Warp an image or feature map with optical flow.
 
     Args:
@@ -129,21 +132,23 @@ def flow_warp(x, flow, interp_mode='bilinear', padding_mode='zeros', align_corne
     _, _, h, w = x.size()
     # create mesh grid
     grid_y, grid_x = torch.meshgrid(torch.arange(0, h).type_as(x), torch.arange(0, w).type_as(x))
-    grid = torch.stack((grid_x, grid_y), 2).float()  # W(x), H(y), 2
+    grid = torch.stack(tensors=(grid_x, grid_y), dim=2).float()  # W(x), H(y), 2
     grid.requires_grad = False
 
     vgrid = grid + flow
     # scale grid to [-1,1]
     vgrid_x = 2.0 * vgrid[:, :, :, 0] / max(w - 1, 1) - 1.0
     vgrid_y = 2.0 * vgrid[:, :, :, 1] / max(h - 1, 1) - 1.0
-    vgrid_scaled = torch.stack((vgrid_x, vgrid_y), dim=3)
-    output = torch.nn.functional.grid_sample(x, vgrid_scaled, mode=interp_mode, padding_mode=padding_mode, align_corners=align_corners)
+    vgrid_scaled = torch.stack(tensors=(vgrid_x, vgrid_y), dim=3)
+    output = torch.nn.functional.grid_sample(input=x,grid= vgrid_scaled,
+                                             mode=interp_mode,
+                                             padding_mode=padding_mode, align_corners=align_corners)
 
     # TODO, what if align_corners=False
     return output
 
 
-def resize_flow(flow, size_type, sizes, interp_mode='bilinear', align_corners=False):
+def resize_flow(flow:torch.Tensor, size_type:str, sizes:list[int|float], interp_mode:str='bilinear', align_corners:bool=False):
     """Resize a flow according to ratio or shape.
 
     Args:
@@ -182,7 +187,7 @@ def resize_flow(flow, size_type, sizes, interp_mode='bilinear', align_corners=Fa
 
 
 # TODO: may write a cpp file
-def pixel_unshuffle(x, scale):
+def pixel_unshuffle(x:torch.Tensor, scale:int):
     """ Pixel unshuffle.
 
     Args:
@@ -238,7 +243,7 @@ def _no_grad_trunc_normal_(tensor, mean, std, a, b):
         return tensor
 
 
-def trunc_normal_(tensor, mean=0., std=1., a=-2., b=2.):
+def trunc_normal_(tensor:torch.Tensor, mean:float=0.0, std:float=1.0, a:float=-2.0, b:float=2.0):
     r"""Fills the input Tensor with values drawn from a truncated
     normal distribution.
 
