@@ -1,41 +1,49 @@
-import torch
-from ConvBlock import ConvBlock
-import torchinfo
+import torch, torchinfo
+from ResidualBlock import ResidualBlock
+from GeneratorEncoderBlock import ConvBlock
+
+
 class Discriminator(torch.nn.Module):
-    def __init__(self, input_shape):
-        super(Discriminator,self).__init__()
-        in_channels, in_height, in_width = input_shape
-        patch_height, patch_width = int(in_height // 2 ** 4), int(in_width // 2 ** 4)
-        self.conv_1 = torch.nn.Conv2d(in_channels=in_channels, kernel_size=3, out_channels=64, stride=1, padding=1)
-        self.activation = torch.nn.LeakyReLU(0.2)
-        discriminator_block = []
-        activation_type = "lrelu"
-        disc_out_channels = [64, 128, 256, 512]
-        for i, out_channels in enumerate(disc_out_channels):
-            if i == 0:
-                discriminator_block.append(
-                    ConvBlock(in_channels=in_channels,
-                              out_channels=disc_out_channels[i],
-                              activation_type=activation_type,
-                              stride=2, padding=1, kernel_size=3)
-                )
-            elif i == 1:
-                discriminator_block.append(
-                    ConvBlock(in_channels=disc_out_channels[0],
-                              out_channels=disc_out_channels[i], kernel_size=3,
-                              stride=1,
-                              activation_type=activation_type,
-                              padding=1)
-                )
-            else:
-                discriminator_block.append(
-                    ConvBlock(in_channels=disc_out_channels[i - 1],
-                              out_channels=disc_out_channels[i], kernel_size=3,
-                              stride=1,
-                              activation_type=activation_type,
-                              padding=1)
-                )
-        self.dics = torch.nn.Sequential(*discriminator_block)
-    def forward(self, x):
-        x = self.dics(x)
-        return x
+    def __init__(self, in_channels: int = 3, kernel_size: int = 4, stride: int = 2, padding: int = 1,
+                 out_channels=[64, 128, 256, 512]):
+        super().__init__()
+        self.initial_layer = torch.nn.Sequential(
+            ConvBlock(in_channels=in_channels, out_channels=out_channels[0],
+                      stride=stride, padding=padding,
+                      kernel_size=kernel_size,
+                      use_activation=True, use_bn=False)
+
+        )
+        in_channels = out_channels[0]
+        layers = []
+        for channel in out_channels[1:]:
+            layers.append(ConvBlock(in_channels=in_channels,
+                                    out_channels=channel,
+                                    stride=1 if channel == out_channels[-1] else 2,
+                                    use_bn=True,
+                                    use_activation=True,
+                                    kernel_size=kernel_size,
+                                    padding=padding))
+            in_channels = channel
+        layers.append(
+            ConvBlock(in_channels=in_channels,
+                      out_channels=1,
+                      kernel_size=kernel_size,
+                      stride=1,
+                      padding=1,
+                      use_activation=False,
+                      use_bn=False, ))
+        self.disc = torch.nn.Sequential(*layers)
+        self.activation = torch.nn.Sigmoid()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.initial_layer(x)
+        return self.activation(self.disc(x))
+
+"""
+model = Discriminator()
+x = torch.randn(size=(5, 3, 720, 720))
+pred = model(x)
+print(pred.shape)
+torchinfo.summary(model=model, input_data=x)
+"""
