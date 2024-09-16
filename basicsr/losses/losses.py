@@ -109,7 +109,7 @@ class CharbonnierLoss(torch.nn.Module):
         return self.loss_weight * charbonnier_loss(pred, target, weight, eps=self.eps, reduction=self.reduction)
 
 
-class WeightedTVLoss(torch.nn.Module,L1Loss):
+class WeightedTVLoss(L1Loss):
     """Weighted TV loss.
 
     Args:
@@ -240,7 +240,7 @@ class GANLoss(torch.nn.Module):
         return loss if is_disc else loss * self.loss_weight
 
 
-class MultiScaleGANLoss(torch.nn.Module,GANLoss):
+class MultiScaleGANLoss(GANLoss):
     """
     MultiScaleGANLoss accepts a list of predictions
     """

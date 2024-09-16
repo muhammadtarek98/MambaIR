@@ -634,7 +634,7 @@ class Upsample(torch.nn.Sequential):
 
 
 def buildMambaIR(upscale=2):
-    return MambaIR(img_size=64,
+    return MambaIR(img_size=128,
                    patch_size=1,
                    in_chans=3,
                    embed_dim=180,
@@ -643,9 +643,9 @@ def buildMambaIR(upscale=2):
                    drop_rate=0.,
                    norm_layer=torch.nn.LayerNorm,
                    patch_norm=True,
-                   use_checkpoint=False,
+                   use_checkpoint=True,
                    upscale=upscale,
-                   img_range=1.,
+                   img_range=1.0,
                    upsampler='pixelshuffle',
                    resi_connection='1conv')
 
@@ -665,6 +665,8 @@ def buildMambaIR_light(upscale=2):
                    img_range=1.,
                    upsampler='pixelshuffledirect',
                    resi_connection='1conv')
+
+
 model=MambaIR(in_chans=3,
               upscale=2,
               img_size=64,
@@ -673,7 +675,7 @@ model=MambaIR(in_chans=3,
               embed_dim=180,
               mlp_ratio=2,upsampler="pixelshuffle",
               resi_connection="1conv")
-state_dict=torch.load(f="/home/muhammad/projects/MambaIR/experiments/pretrained_models/ColorDN_MambaIR_level50.pth",
+state_dict=torch.load(f="/home/muahmmad/projects/Image_enhancement/MambaIR/experiments/pretrained_models/MambaIR-real.pth",
                       map_location="cuda")
 #for keys in state_dict["params"]:
 #    print(keys)
