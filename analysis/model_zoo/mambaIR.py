@@ -511,6 +511,7 @@ class UpsampleOneStep(torch.nn.Module):
         x=self.conv(x)
         return self.pixel_shuffle(x)
 
+
 class ResidualGroup(torch.nn.Module):
     def __init__(self,
                  dim,
@@ -525,7 +526,6 @@ class ResidualGroup(torch.nn.Module):
                  patch_size=None,
                  resi_connection='1conv'):
         super(ResidualGroup, self).__init__()
-
         self.dim = dim
         self.input_resolution = input_resolution # [64, 64]
         self.residual_group = BasicLayer(
@@ -537,7 +537,6 @@ class ResidualGroup(torch.nn.Module):
             norm_layer=norm_layer,
             downsample=downsample,
             use_checkpoint=use_checkpoint)
-
         if resi_connection == '1conv':
             self.conv = torch.nn.Conv2d(in_channels=dim,out_channels= dim,kernel_size= 3, stride=1, padding=1)
         elif resi_connection == '3conv':
