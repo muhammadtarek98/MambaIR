@@ -2,17 +2,18 @@ import pytorch_lightning as pl
 import torchinfo
 import torch, torchvision
 from Dataset import CustomDataset
-from Discriminator import Discriminator
+from UW_CycleGAN.Discriminator import Discriminator
 import torchmetrics
 from MambaIR.analysis.model_zoo.mambaIR import buildMambaIR, buildMambaIR_light
 import albumentations as A
 
 
 class CycleMambaGAN(pl.LightningModule):
-    def __init__(self, batch_size: int, train_loader=None,
+    def __init__(self, batch_size: int,
+                 train_loader=None,
                  lr: float = 1e-4,
-                 input_shape: tuple[int] = (3, 128, 128)
-                 , val_loader=None,
+                 input_shape: tuple[int] = (3, 128, 128),
+                 val_loader=None,
                  cycle_lambda: int = 10,
                  identity_lambda: float = 0.5):
         super(CycleMambaGAN, self).__init__()
@@ -146,7 +147,11 @@ class CycleMambaGAN(pl.LightningModule):
                "hr_generator_loss": hr_gen_loss
                }
         for k, v in log.items():
-            self.log(name=k, value=v, logger=True, on_epoch=True, prog_bar=True, on_step=True, enable_graph=True)
+            self.log(name=k, value=v,
+                     logger=True, on_epoch=True,
+                     prog_bar=True,
+                     on_step=True,
+                     enable_graph=True)
         return log
 
     def predictions_logger(self, hr_cycled, lr_cycled,
