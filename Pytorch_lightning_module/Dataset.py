@@ -6,7 +6,7 @@ import torch
 import numpy as np
 import torchvision
 import albumentations
-from UW_CycleGAN import Configs
+import Configs
 
 
 def prepare_image(image_dir):

@@ -1,5 +1,5 @@
 import torch, torchinfo
-from UW_CycleGAN.GeneratorEncoderBlock import ConvBlock
+from GeneratorEncoderBlock import ConvBlock
 
 
 class ResidualBlock(torch.nn.Module):

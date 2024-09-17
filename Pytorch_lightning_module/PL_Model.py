@@ -1,10 +1,9 @@
 import pytorch_lightning as pl
 import torchinfo
-import torch
+import torch,torchvision
 from Dataset import CustomDataset
 from Discriminator import Discriminator
 import torchmetrics
-from MambaIR.basicsr.losses.losses import charbonnier_loss
 from MambaIR.analysis.model_zoo.mambaIR import buildMambaIR,buildMambaIR_light
 import albumentations as A
 class CycleMambaGAN(pl.LightningModule):
@@ -86,6 +85,7 @@ class CycleMambaGAN(pl.LightningModule):
         hr_generator_LR_schedular = self.lr_schedulers()[3]
         hr_discriminator_optimizer.zero_grad()
         lr_discriminator_optimizer.zero_grad()
+        #discriminator loss
         lr_disc_loss = self.discriminator_loss(discriminator=self.hr_discriminator,
                                                generator=self.hr_generator,
                                                fake=lr_image, real=hr_image)
@@ -100,26 +100,25 @@ class CycleMambaGAN(pl.LightningModule):
         hr_discriminator_LR_schedular.step(lr_disc_loss)
         lr_discriminator_LR_schedular.step(hr_disc_loss)
 
-
+        #generator loss
         lr_generator_optimizer.zero_grad()
         hr_generator_optimizer.zero_grad()
         lr_gen_loss = self.generator_loss(self.lr_discriminator, fake_lr)
         hr_gen_loss = self.generator_loss(self.hr_discriminator, fake_hr)
 
-
+        #cycle loss
         cycled_lr = self.lr_generator(fake_hr)
         cycled_hr = self.hr_generator(fake_lr)
         cycled_lr_loss = self.cycle_loss(real=lr_image, cycled=cycled_lr)
         cycled_hr_loss = self.cycle_loss(real=hr_image, cycled=cycled_hr)
         total_cycle_loss=(cycled_hr_loss*self.cycle_lambda)+(cycled_lr_loss*self.cycle_lambda)
 
-
+        #identity loss
         lr_identity = self.lr_generator(lr_image)
         hr_identity = self.hr_generator(hr_image)
         lr_identity_loss = self.identity_loss(real=lr_image, identity=lr_identity)
         hr_identity_loss = self.identity_loss(real=hr_image, identity=hr_identity)
         total_identity_loss=(self.identity_lambda*lr_identity_loss)+(self.identity_lambda*hr_identity_loss)
-
 
         total_gen_loss=lr_gen_loss+hr_gen_loss+total_identity_loss+total_cycle_loss
         self.manual_backward(total_gen_loss,retain_graph=True)
@@ -128,6 +127,13 @@ class CycleMambaGAN(pl.LightningModule):
 
         lr_generator_LR_schedular.step()
         hr_generator_LR_schedular.step()
+        self.predictions_logger(hr_cycled=cycled_hr,
+                                lr_cycled=cycled_lr,
+                                gen_lr_image=fake_hr,
+                                gen_hr_image=fake_lr,
+                                real_lr_image=lr_image,
+                                real_hr_image=hr_image)
+
         log={"total_discriminator_loss":total_disc_loss,
              "lr_discriminator_loss": lr_disc_loss,
              "total_generator_loss":total_gen_loss,
@@ -138,64 +144,33 @@ class CycleMambaGAN(pl.LightningModule):
              "lr_generator_loss":lr_gen_loss,
              "hr_generator_loss":hr_gen_loss
             }
-
-        self.log(name="total_discriminator_loss",
-                 value=total_disc_loss,
-                 on_step=True,
-                 on_epoch=True,
-                 prog_bar=True)
-        self.log(name="lr_discriminator_loss",
-                 value=lr_disc_loss,
-                 prog_bar=True,
-                 logger=True,
-                 on_step=True,
-                 on_epoch=True)
-        self.log(name="hr_discriminator_loss",
-                 value=hr_disc_loss,
-                 prog_bar=True,
-                 logger=True,
-                 on_step=True,
-                 on_epoch=True)
-        self.log(name="total_generator_loss",
-                 value=total_gen_loss,
-                 prog_bar=True,
-                 logger=True,
-                 on_step=True,
-                 on_epoch=True)
-        self.log(name="lr_identity_loss",
-                 value=lr_identity_loss,
-                 on_step=True,
-                 on_epoch=True,
-                 prog_bar=True)
-        self.log(name="hr_identity_loss",
-                 value=hr_identity_loss,
-                 prog_bar=True,
-                 logger=True,
-                 on_step=True,
-                 on_epoch=True)
-        self.log(name="lr_cycle_loss",
-                 value=cycled_lr_loss,
-                 on_step=True,
-                 on_epoch=True,
-                 prog_bar=True)
-        self.log(name="hr_cycle_loss",
-                 value=cycled_hr_loss,
-                 prog_bar=True,
-                 logger=True,
-                 on_step=True,
-                 on_epoch=True)
-        self.log(name="lr_generator_loss",
-                 value=lr_gen_loss,
-                 on_step=True,
-                 on_epoch=True,
-                 prog_bar=True)
-        self.log(name="hr_generator_loss",
-                 value=hr_gen_loss,
-                 prog_bar=True,
-                 logger=True,
-                 on_step=True,
-                 on_epoch=True)
+        for k,v in log.items():
+            self.log(name=k,value=v,logger=True,on_epoch=True,prog_bar=True,on_step=True,enable_graph=True)
         return log
+
+    def predictions_logger(self,hr_cycled,lr_cycled,
+                           gen_hr_image,real_lr_image,
+                           real_hr_image,gen_lr_image)->None:
+        real_lr_image=torchvision.utils.make_grid(tensor=real_lr_image,normalize=False)
+        hr_cycled=torchvision.utils.make_grid(tensor=hr_cycled,normalize=False)
+        lr_cycled=torchvision.utils.make_grid(tensor=lr_cycled,normalize=False)
+        real_hr_image=torchvision.utils.make_grid(tensor=real_hr_image,normalize=False)
+        gen_hr_image=torchvision.utils.make_grid(tensor=gen_hr_image,normalize=False)
+        gen_lr_image=torchvision.utils.make_grid(tensor=gen_lr_image,normalize=False)
+        self.logger.experiment.add_image("real low quality image",
+                                         real_lr_image,self.current_epoch)
+        self.logger.experiment.add_image("cycled high quality image",
+                                         hr_cycled,self.current_epoch)
+        self.logger.experiment.add_image("cycled low quality image",
+                                         lr_cycled,self.current_epoch)
+        self.logger.experiment.add_image("real high quality image",
+                                         real_hr_image,self.current_epoch)
+        self.logger.experiment.add_image("generated low quality image",
+                                         gen_lr_image,self.current_epoch)
+        self.logger.experiment.add_image("generated high quality image",
+                                         gen_hr_image,self.current_epoch)
+
+
 
     def configure_optimizers(self):
         self.hparams.lr = self.learning_rate
@@ -228,7 +203,6 @@ device_type = "gpu" if torch.cuda.is_available() else "cpu"  # Use GPU if availa
 transform = A.Compose(is_check_shapes=False,transforms=[
     A.Resize(height=64, width=64),
     A.ToFloat(),
-    #A.Normalize(mean=[0.24472233,0.50500972,0.4443582],std=[0.20768219,0.24286765,0.2468539 ],always_apply=True),
     A.pytorch.ToTensorV2()],
     additional_targets={'hr_image': 'image'},)
 device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
