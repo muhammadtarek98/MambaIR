@@ -652,9 +652,14 @@ def buildMambaIR(upscale=1):
 
 
 def buildMambaIR_light(upscale=1):
-    return MambaIR(img_size=64, patch_size=1, in_chans=3, embed_dim=60, depths=(6, 6, 6, 6), mlp_ratio=1.5,
-                   drop_rate=0., norm_layer=torch.nn.LayerNorm, patch_norm=True, use_checkpoint=False, upscale=upscale,
-                   img_range=1., upsampler='pixelshuffledirect', resi_connection='1conv')
+    return MambaIR(img_size=64, patch_size=1, in_chans=3,
+                   embed_dim=30, depths=(6, 6, 6, 6),
+                   mlp_ratio=1.5,
+                   drop_rate=0., norm_layer=torch.nn.LayerNorm,
+                   patch_norm=True,
+                   use_checkpoint=False, upscale=upscale,
+                   img_range=1., upsampler='pixelshuffledirect',
+                   resi_connection='1conv')
 
 """
 model=buildMambaIR()
