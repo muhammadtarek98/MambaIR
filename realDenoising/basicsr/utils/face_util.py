@@ -4,7 +4,7 @@ import os
 import torch
 from skimage import transform as trans
 
-from basicsr.utils import imwrite
+from MambaIR.realDenoising.basicsr.utils import imwrite
 
 try:
     import dlib

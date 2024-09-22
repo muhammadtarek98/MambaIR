@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from basicsr.models.losses.loss_util import weighted_loss
+from MambaIR.realDenoising.basicsr.models.losses.loss_util import weighted_loss
 
 _reduction_modes = ['none', 'mean', 'sum']
 

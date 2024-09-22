@@ -4,7 +4,6 @@ import random
 import time
 import torch
 from os import path as osp
-
 from .dist_util import master_only
 from .logger import get_root_logger
 
