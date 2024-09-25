@@ -2,13 +2,13 @@ import importlib
 from collections import OrderedDict
 from copy import deepcopy
 import torch
-from basicsr.models.archs import define_network
+from MambaIR.realDenoising.basicsr.models.archs import define_network
 
-from basicsr.models.base_model import BaseModel
-from basicsr.utils import get_root_logger, imwrite, tensor2img
+from MambaIR.realDenoising.basicsr.models.base_model import BaseModel
+from MambaIR.realDenoising.basicsr.utils import get_root_logger, imwrite, tensor2img
 
-loss_module = importlib.import_module('basicsr.models.losses')
-metric_module = importlib.import_module('basicsr.metrics')
+loss_module = importlib.import_module('MambaIR.realDenoising.basicsr.models.losses')
+metric_module = importlib.import_module('MambaIR.realDenoising.basicsr.metrics')
 
 import os
 import random

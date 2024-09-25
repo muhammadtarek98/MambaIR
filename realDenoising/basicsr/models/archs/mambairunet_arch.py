@@ -3,7 +3,7 @@ import torch
 from timm.models.layers import to_2tuple, trunc_normal_
 from pdb import set_trace as stx
 import numbers
-from timm.models.layers import DropPath, to_2tuple, trunc_normal_
+from timm.models.layers import  to_2tuple, trunc_normal_
 from mamba_ssm.ops.selective_scan_interface import selective_scan_fn, selective_scan_ref
 from einops import rearrange
 import math
@@ -387,7 +387,7 @@ class VSSBlock(torch.nn.Module):
         super(VSSBlock,self).__init__()
         self.ln_1 = norm_layer(hidden_dim)
         self.self_attention = SS2D(d_model=hidden_dim, d_state=d_state,expand=int(expand),dropout=attn_drop_rate, **kwargs)
-        self.drop_path = DropPath(drop_path)
+        self.drop_path = torch.nn.Dropout(drop_path)
         self.skip_scale= torch.nn.Parameter(torch.ones(hidden_dim))
         self.conv_blk = CAB(hidden_dim)
         self.ln_2 = torch.nn.LayerNorm(hidden_dim)

@@ -1,7 +1,7 @@
 import argparse
 from os import path as osp
 
-from MambaIR.basicsr.utils import scandir
+from MambaIR.realDenoising.basicsr.utils import scandir
 #from MambaIR.basicsr.utils.lmdb_util import make_lmdb_from_imgs
 
 def prepare_keys(folder_path, suffix='png'):
